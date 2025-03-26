@@ -11,14 +11,14 @@ const AddButton = ({ onPress }) => {
 
 const styles = StyleSheet.create({
   addButton: {
-    marginTop: 30,
+    marginTop: 190,
     paddingVertical: 15,
     paddingHorizontal: 30,
     backgroundColor: '#007bff',
     borderRadius: 10,
     shadowColor: '#000',
     shadowOpacity: 0.2,
-    shadowOffset: { width: 0, height: 3 },
+    shadowOffset: { width: 0, height: 2 },
     shadowRadius: 5,
     elevation: 4,
   },
