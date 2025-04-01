@@ -12,8 +12,11 @@ import {
   ScrollView
 } from 'react-native';
 import Ionicons from "react-native-vector-icons/Ionicons";
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const AddTodoScreen = ({ navigation }) => {
+const STORAGE_KEY = '@todo_app_data';
+
+const AddTodoScreen = ({ navigation, route }) => {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
 
@@ -43,15 +46,37 @@ const AddTodoScreen = ({ navigation }) => {
       createdAt: new Date().toISOString(),
     };
     
-    // Pass the new todo back to the HomeScreen
-    navigation.navigate('Home', { newTodo });
-    
-    // Show success message
-    Alert.alert('Success', 'Todo Added Successfully');
-    
-    // Clear form fields for next entry
-    setTitle('');
-    setDescription('');
+    try {
+      // Get current todos from AsyncStorage
+      const storedTodos = await AsyncStorage.getItem(STORAGE_KEY);
+      let updatedTodos = [];
+      
+      if (storedTodos !== null) {
+        // Parse the JSON string to get the array
+        const currentTodos = JSON.parse(storedTodos);
+        // Add new todo at the beginning of the array
+        updatedTodos = [newTodo, ...currentTodos];
+      } else {
+        // If no todos exist yet, create an array with just the new todo
+        updatedTodos = [newTodo];
+      }
+      
+      // Save the updated todos back to AsyncStorage
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedTodos));
+      
+      // Show success message
+      Alert.alert('Success', 'Todo Added Successfully');
+      
+      // Navigate back to HomeScreen - it will load the updated todos from AsyncStorage
+      navigation.goBack();
+      
+      // Clear form fields for next entry
+      setTitle('');
+      setDescription('');
+    } catch (error) {
+      console.error('Error saving todo:', error);
+      Alert.alert('Error', 'Failed to save todo. Please try again.');
+    }
   };
   
   const goBack = () => {
