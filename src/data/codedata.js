@@ -13,11 +13,5 @@ export const todos = [
     completed: false,
     createdAt: new Date().toISOString()
   },
-  { 
-    id: '3', 
-    title: 'Finish React Native project',
-    description: 'Complete the Todo app assignment',
-    completed: false,
-    createdAt: new Date().toISOString()
-  },
+  
 ];
