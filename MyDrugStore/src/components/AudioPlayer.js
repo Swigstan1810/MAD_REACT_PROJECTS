@@ -1,16 +1,26 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View, Modal, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 
 const AudioPlayer = ({ gender, audioFile, onStudyPress }) => {
   const [speed, setSpeed] = useState(1.0);
   const [showSpeedOptions, setShowSpeedOptions] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
   
-  const speedOptions = [0.25, 0.33, 0.75, 1.0];
+  const speedOptions = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
   
   const handlePlayPress = () => {
     // In milestone 1, we're not implementing actual audio playback
     console.log(`Playing ${audioFile} at speed ${speed}x`);
+    setIsPlaying(!isPlaying);
+    
+    // Mock audio playback with timeout to toggle state back
+    if (!isPlaying) {
+      setTimeout(() => {
+        setIsPlaying(false);
+      }, 3000); // Simulate 3 seconds of audio playback
+    }
   };
   
   const toggleSpeedOptions = () => {
@@ -22,18 +32,31 @@ const AudioPlayer = ({ gender, audioFile, onStudyPress }) => {
     setShowSpeedOptions(false);
   };
   
+  const gradientColors = gender === 'female' 
+    ? ['#FF6CAB', '#7366FF'] 
+    : ['#4776E6', '#8E54E9'];
+  
   return (
     <View style={styles.container}>
-      <View style={styles.playerRow}>
+      <LinearGradient
+        colors={gradientColors}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 0 }}
+        style={styles.playerRow}
+      >
         <TouchableOpacity style={styles.iconButton} onPress={handlePlayPress}>
-          <Ionicons name="play-circle" size={28} color="#007AFF" />
+          <Ionicons 
+            name={isPlaying ? "pause-circle" : "play-circle"} 
+            size={44} 
+            color="#fff" 
+          />
         </TouchableOpacity>
         
         <View style={styles.genderContainer}>
           <Ionicons 
             name={gender === 'female' ? 'woman' : 'man'} 
-            size={22} 
-            color={gender === 'female' ? '#FF6B8A' : '#4A80F0'} 
+            size={24} 
+            color="#fff"
           />
           <Text style={styles.genderLabel}>
             {gender === 'female' ? 'Female' : 'Male'}
@@ -42,50 +65,72 @@ const AudioPlayer = ({ gender, audioFile, onStudyPress }) => {
         
         <TouchableOpacity style={styles.speedButton} onPress={toggleSpeedOptions}>
           <Text style={styles.speedText}>{speed}x</Text>
-          <Ionicons name="chevron-down" size={16} color="#666" />
+          <Ionicons name="chevron-down" size={16} color="#fff" />
         </TouchableOpacity>
         
         <TouchableOpacity style={styles.studyButton} onPress={onStudyPress}>
-          <Text style={styles.studyButtonText}>Study</Text>
+          <Text style={styles.studyButtonText}>
+            <Ionicons name="bookmark" size={14} color="#fff" style={styles.studyIcon} /> Study
+          </Text>
         </TouchableOpacity>
-      </View>
+      </LinearGradient>
       
-      {showSpeedOptions && (
-        <View style={styles.speedOptions}>
-          {speedOptions.map((option) => (
-            <TouchableOpacity
-              key={option}
-              style={[
-                styles.speedOption,
-                speed === option && styles.selectedSpeed,
-              ]}
-              onPress={() => selectSpeed(option)}
-            >
-              <Text
-                style={[
-                  styles.speedOptionText,
-                  speed === option && styles.selectedSpeedText,
-                ]}
-              >
-                {option}x
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      )}
+      <Modal
+        transparent={true}
+        visible={showSpeedOptions}
+        onRequestClose={() => setShowSpeedOptions(false)}
+        animationType="fade"
+      >
+        <Pressable 
+          style={styles.modalOverlay} 
+          onPress={() => setShowSpeedOptions(false)}
+        >
+          <View style={styles.speedOptionsContainer}>
+            <View style={styles.speedOptions}>
+              <Text style={styles.speedOptionsTitle}>Playback Speed</Text>
+              <View style={styles.optionsGrid}>
+                {speedOptions.map((option) => (
+                  <TouchableOpacity
+                    key={option}
+                    style={[
+                      styles.speedOption,
+                      speed === option && styles.selectedSpeed,
+                    ]}
+                    onPress={() => selectSpeed(option)}
+                  >
+                    <Text
+                      style={[
+                        styles.speedOptionText,
+                        speed === option && styles.selectedSpeedText,
+                      ]}
+                    >
+                      {option}x
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          </View>
+        </Pressable>
+      </Modal>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
-    marginVertical: 8,
+    marginVertical: 10,
+    borderRadius: 12,
+    overflow: 'hidden',
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
   },
   playerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f5f5f5',
-    borderRadius: 8,
     padding: 10,
   },
   iconButton: {
@@ -98,67 +143,96 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   genderLabel: {
-    fontSize: 14,
-    marginLeft: 4,
-    color: '#444',
+    fontSize: 16,
+    marginLeft: 6,
+    color: '#fff',
+    fontWeight: '500',
   },
   speedButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#e8e8e8',
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     marginLeft: 10,
   },
   speedText: {
-    fontSize: 12,
-    marginRight: 2,
-    color: '#666',
+    fontSize: 14,
+    marginRight: 4,
+    color: '#fff',
+    fontWeight: '500',
   },
   studyButton: {
     marginLeft: 'auto',
-    backgroundColor: '#007AFF',
+    backgroundColor: 'rgba(0, 0, 0, 0.2)',
     paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 6,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
   },
   studyButtonText: {
     color: '#fff',
     fontWeight: '500',
     fontSize: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
-  speedOptions: {
-    position: 'absolute',
-    top: 50,
-    left: 100,
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#ddd',
+  studyIcon: {
+    marginRight: 4,
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  speedOptionsContainer: {
+    width: '80%',
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-    zIndex: 1000,
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  speedOptions: {
+    width: '100%',
+  },
+  speedOptionsTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  optionsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
   },
   speedOption: {
-    padding: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    margin: 6,
+    borderRadius: 20,
+    backgroundColor: '#f0f0f0',
+    minWidth: 60,
     alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
   },
   selectedSpeed: {
-    backgroundColor: '#f0f0f0',
+    backgroundColor: '#6c5ce7',
   },
   speedOptionText: {
-    fontSize: 14,
+    fontSize: 16,
     color: '#333',
   },
   selectedSpeedText: {
-    fontWeight: '600',
-    color: '#007AFF',
+    color: '#fff',
+    fontWeight: 'bold',
   },
 });
 

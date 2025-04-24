@@ -1,5 +1,3 @@
-// src/screens/DrugDetailScreen.js
-
 import React from 'react';
 import { 
   StyleSheet, 
@@ -7,11 +5,16 @@ import {
   View, 
   ScrollView, 
   TouchableOpacity, 
-  SafeAreaView 
+  SafeAreaView,
+  ImageBackground,
+  Dimensions
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AudioPlayer from '../components/AudioPlayer';
 import { getDrugById, getCategoryNameById } from '../data/mockData';
+import { LinearGradient } from 'expo-linear-gradient';
+
+const { width } = Dimensions.get('window');
 
 const DrugDetailScreen = ({ navigation, route }) => {
   const { drugId } = route.params;
@@ -19,22 +22,39 @@ const DrugDetailScreen = ({ navigation, route }) => {
 
   if (!drug) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity 
-            style={styles.backButton}
-            onPress={() => navigation.goBack()}
-          >
-            <Ionicons name="arrow-back" size={24} color="#007AFF" />
-          </TouchableOpacity>
-          <Text style={styles.title}>Drug Not Found</Text>
-        </View>
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>
-            Sorry, we couldn't find information for this drug.
-          </Text>
-        </View>
-      </SafeAreaView>
+      <ImageBackground 
+        source={require('../assets/back1.jpg')}
+        style={styles.backgroundImage}
+      >
+        <LinearGradient
+          colors={['rgba(0,0,0,0.15)', 'rgba(0,0,0,0.20)']}
+          style={styles.gradient}
+        >
+          <SafeAreaView style={styles.container}>
+            <View style={styles.header}>
+              <TouchableOpacity 
+                style={styles.backButton}
+                onPress={() => navigation.goBack()}
+              >
+                <Ionicons name="arrow-back" size={28} color="#fff" />
+              </TouchableOpacity>
+              <Text style={styles.title}>Drug Not Found</Text>
+            </View>
+            <View style={styles.errorContainer}>
+              <Ionicons name="alert-circle" size={80} color="rgba(255,255,255,0.8)" />
+              <Text style={styles.errorText}>
+                Sorry, we couldn't find information for this drug.
+              </Text>
+              <TouchableOpacity 
+                style={styles.returnButton}
+                onPress={() => navigation.navigate('Categories')}
+              >
+                <Text style={styles.returnButtonText}>Return to Categories</Text>
+              </TouchableOpacity>
+            </View>
+          </SafeAreaView>
+        </LinearGradient>
+      </ImageBackground>
     );
   }
 
@@ -44,100 +64,137 @@ const DrugDetailScreen = ({ navigation, route }) => {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity 
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
-          <Ionicons name="arrow-back" size={24} color="#007AFF" />
-        </TouchableOpacity>
-        <Text style={styles.title}>{drug.name}</Text>
-      </View>
-
-      <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Molecular Formula</Text>
-          <Text style={styles.formula}>{drug.molecularFormulas}</Text>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Description</Text>
-          <Text style={styles.description}>{drug.description}</Text>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Categories</Text>
-          <View style={styles.categoryContainer}>
-            {drug.categories.map((categoryId) => (
-              <View style={styles.categoryBadge} key={categoryId}>
-                <Text style={styles.categoryText}>
-                  {getCategoryNameById(categoryId)}
-                </Text>
-              </View>
-            ))}
+    <ImageBackground 
+       source={require('../assets/back1.jpg')}
+      style={styles.backgroundImage}
+    >
+      <LinearGradient
+        colors={['rgba(0,0,0,0.15)', 'rgba(0,0,0,0.20)']}
+        style={styles.gradient}
+      >
+        <SafeAreaView style={styles.container}>
+          <View style={styles.header}>
+            <TouchableOpacity 
+              style={styles.backButton}
+              onPress={() => navigation.goBack()}
+            >
+              <Ionicons name="arrow-back" size={28} color="#fff" />
+            </TouchableOpacity>
+            <Text style={styles.title}>{drug.name}</Text>
           </View>
-        </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Pronunciations</Text>
+          <ScrollView contentContainerStyle={styles.content}>
+            <View style={styles.card}>
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Molecular Formula</Text>
+                <Text style={styles.formula}>{drug.molecularFormulas}</Text>
+              </View>
 
-          <AudioPlayer 
-            gender="female"
-            audioFile={drug.femaleAudio}
-            onStudyPress={handleStudyPress}
-          />
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Description</Text>
+                <Text style={styles.description}>{drug.description}</Text>
+              </View>
 
-          <AudioPlayer 
-            gender="male"
-            audioFile={drug.maleAudio}
-            onStudyPress={handleStudyPress}
-          />
-        </View>
-      </ScrollView>
-    </SafeAreaView>
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Categories</Text>
+                <View style={styles.categoryContainer}>
+                  {drug.categories.map((categoryId) => (
+                    <View style={styles.categoryBadge} key={categoryId}>
+                      <Text style={styles.categoryText}>
+                        {getCategoryNameById(categoryId)}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.card}>
+              <Text style={styles.sectionTitle}>Pronunciations</Text>
+
+              <AudioPlayer 
+                gender="female"
+                audioFile={drug.femaleAudio}
+                onStudyPress={handleStudyPress}
+              />
+
+              <AudioPlayer 
+                gender="male"
+                audioFile={drug.maleAudio}
+                onStudyPress={handleStudyPress}
+              />
+            </View>
+          </ScrollView>
+        </SafeAreaView>
+      </LinearGradient>
+    </ImageBackground>
   );
 };
 
 const styles = StyleSheet.create({
+  backgroundImage: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
+  },
+  gradient: {
+    flex: 1,
+  },
   container: {
     flex: 1,
-    backgroundColor: '#f9f9f9',
+    backgroundColor: 'transparent',
   },
   header: {
     padding: 20,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    paddingTop: 40,
+    backgroundColor: 'transparent',
   },
   backButton: {
     marginBottom: 12,
   },
   title: {
-    fontSize: 28,
+    fontSize: 32,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#fff',
+    textShadowColor: 'rgba(0, 0, 0, 0.5)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 5,
   },
   content: {
-    padding: 20,
+    padding: 15,
+    paddingBottom: 40,
+  },
+  card: {
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderRadius: 20,
+    padding: 10,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 8,
   },
   section: {
     marginBottom: 24,
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '600',
     color: '#333',
     marginBottom: 12,
   },
   formula: {
-    fontSize: 16,
+    fontSize: 18,
     fontStyle: 'italic',
     color: '#444',
+    backgroundColor: 'rgba(0, 0, 0, 0.05)',
+    padding: 10,
+    borderRadius: 10,
   },
   description: {
     fontSize: 16,
-    lineHeight: 24,
+    lineHeight: 26,
     color: '#444',
   },
   categoryContainer: {
@@ -145,28 +202,43 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   categoryBadge: {
-    backgroundColor: '#e1f5fe',
+    backgroundColor: '#4A80F0',
     borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    marginRight: 8,
-    marginBottom: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    marginRight: 10,
+    marginBottom: 10,
   },
   categoryText: {
-    color: '#0277bd',
+    color: '#fff',
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: '600',
   },
   errorContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    padding: 30,
   },
   errorText: {
-    fontSize: 16,
-    color: '#666',
+    fontSize: 18,
+    color: '#fff',
     textAlign: 'center',
+    marginTop: 20,
+    marginBottom: 30,
+  },
+  returnButton: {
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 30,
+    borderWidth: 1,
+    borderColor: '#fff',
+  },
+  returnButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
 
