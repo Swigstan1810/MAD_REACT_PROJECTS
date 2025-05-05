@@ -2,7 +2,7 @@ import React from 'react';
 import { StyleSheet, Text, View, FlatList, TouchableOpacity, SafeAreaView, ImageBackground } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import DrugItem from '../components/DrugItem';
-import { getDrugsByCategory } from '../data/mockData';
+import { getDrugsByCategory } from '../data/dataAdapter';
 import { LinearGradient } from 'expo-linear-gradient';
 
 const DrugListScreen = ({ navigation, route }) => {

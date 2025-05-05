@@ -2,16 +2,25 @@ import React, { useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View, Modal, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useDispatch, useSelector } from 'react-redux';
+import { addToCurrent } from '../redux/learningSlice';
 
-const AudioPlayer = ({ gender, audioFile, onStudyPress }) => {
+const AudioPlayer = ({ gender, audioFile, onStudyPress, drug, hideStudyButton = false }) => {
   const [speed, setSpeed] = useState(1.0);
   const [showSpeedOptions, setShowSpeedOptions] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   
+  const dispatch = useDispatch();
+  const currentLearning = useSelector(state => state.learning.currentLearning);
+  const finished = useSelector(state => state.learning.finished);
+  
+  const isDrugInLearning = drug && 
+    (currentLearning.some(item => item.id === drug.id) || 
+     finished.some(item => item.id === drug.id));
+  
   const speedOptions = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
   
   const handlePlayPress = () => {
-    // In milestone 1, we're not implementing actual audio playback
     console.log(`Playing ${audioFile} at speed ${speed}x`);
     setIsPlaying(!isPlaying);
     
@@ -30,6 +39,15 @@ const AudioPlayer = ({ gender, audioFile, onStudyPress }) => {
   const selectSpeed = (newSpeed) => {
     setSpeed(newSpeed);
     setShowSpeedOptions(false);
+  };
+  
+  const handleStudyButtonPress = () => {
+    if (drug) {
+      dispatch(addToCurrent(drug));
+    }
+    if (onStudyPress) {
+      onStudyPress();
+    }
   };
   
   const gradientColors = gender === 'female' 
@@ -68,11 +86,13 @@ const AudioPlayer = ({ gender, audioFile, onStudyPress }) => {
           <Ionicons name="chevron-down" size={16} color="#fff" />
         </TouchableOpacity>
         
-        <TouchableOpacity style={styles.studyButton} onPress={onStudyPress}>
-          <Text style={styles.studyButtonText}>
-            <Ionicons name="bookmark" size={14} color="#fff" style={styles.studyIcon} /> Study
-          </Text>
-        </TouchableOpacity>
+        {!hideStudyButton && !isDrugInLearning && (
+          <TouchableOpacity style={styles.studyButton} onPress={handleStudyButtonPress}>
+            <Text style={styles.studyButtonText}>
+              <Ionicons name="bookmark" size={14} color="#fff" style={styles.studyIcon} /> Study
+            </Text>
+          </TouchableOpacity>
+        )}
       </LinearGradient>
       
       <Modal
@@ -117,6 +137,7 @@ const AudioPlayer = ({ gender, audioFile, onStudyPress }) => {
   );
 };
 
+// Add the styles that were missing
 const styles = StyleSheet.create({
   container: {
     marginVertical: 10,

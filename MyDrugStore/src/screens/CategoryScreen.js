@@ -1,7 +1,7 @@
 import React from 'react';
 import { StyleSheet, Text, View, FlatList, SafeAreaView, ImageBackground } from 'react-native';
 import CategoryCard from '../components/CategoryCard';
-import { drugCategories } from '../data/mockData';
+import { drugCategories } from '../data/dataAdapter';
 import { LinearGradient } from 'expo-linear-gradient';
 
 const CategoryScreen = ({ navigation }) => {

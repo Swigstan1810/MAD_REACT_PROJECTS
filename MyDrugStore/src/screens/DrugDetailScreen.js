@@ -10,8 +10,9 @@ import {
   Dimensions
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSelector } from 'react-redux';
 import AudioPlayer from '../components/AudioPlayer';
-import { getDrugById, getCategoryNameById } from '../data/mockData';
+import { getDrugById, getCategoryNameById } from '../data/dataAdapter';
 import { LinearGradient } from 'expo-linear-gradient';
 
 const { width } = Dimensions.get('window');
@@ -19,6 +20,13 @@ const { width } = Dimensions.get('window');
 const DrugDetailScreen = ({ navigation, route }) => {
   const { drugId } = route.params;
   const drug = getDrugById(drugId);
+  
+  const currentLearning = useSelector(state => state.learning.currentLearning);
+  const finished = useSelector(state => state.learning.finished);
+  
+  const isDrugInLearning = drug && 
+    (currentLearning.some(item => item.id === drug.id) || 
+     finished.some(item => item.id === drug.id));
 
   if (!drug) {
     return (
@@ -58,14 +66,9 @@ const DrugDetailScreen = ({ navigation, route }) => {
     );
   }
 
-  const handleStudyPress = () => {
-    // Placeholder for future feature
-    console.log(`Adding ${drug.name} to learning list`);
-  };
-
   return (
     <ImageBackground 
-       source={require('../assets/back1.jpg')}
+      source={require('../assets/back1.jpg')}
       style={styles.backgroundImage}
     >
       <LinearGradient
@@ -89,6 +92,16 @@ const DrugDetailScreen = ({ navigation, route }) => {
                 <Text style={styles.sectionTitle}>Molecular Formula</Text>
                 <Text style={styles.formula}>{drug.molecularFormulas}</Text>
               </View>
+
+              {/* Add Other Names section if available */}
+              {drug.otherNames && drug.otherNames.length > 0 && (
+                <View style={styles.section}>
+                  <Text style={styles.sectionTitle}>Other Names</Text>
+                  <Text style={styles.otherNames}>
+                    {drug.otherNames.join(', ')}
+                  </Text>
+                </View>
+              )}
 
               <View style={styles.section}>
                 <Text style={styles.sectionTitle}>Description</Text>
@@ -115,13 +128,13 @@ const DrugDetailScreen = ({ navigation, route }) => {
               <AudioPlayer 
                 gender="female"
                 audioFile={drug.femaleAudio}
-                onStudyPress={handleStudyPress}
+                drug={drug}
               />
 
               <AudioPlayer 
                 gender="male"
                 audioFile={drug.maleAudio}
-                onStudyPress={handleStudyPress}
+                drug={drug}
               />
             </View>
           </ScrollView>
@@ -131,6 +144,7 @@ const DrugDetailScreen = ({ navigation, route }) => {
   );
 };
 
+// Add the styles definition here - this was the missing part
 const styles = StyleSheet.create({
   backgroundImage: {
     flex: 1,
@@ -188,6 +202,15 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontStyle: 'italic',
     color: '#444',
+    backgroundColor: 'rgba(0, 0, 0, 0.05)',
+    padding: 10,
+    borderRadius: 10,
+  },
+  // Add style for other names
+  otherNames: {
+    fontSize: 16,
+    fontStyle: 'italic',
+    color: '#666',
     backgroundColor: 'rgba(0, 0, 0, 0.05)',
     padding: 10,
     borderRadius: 10,
