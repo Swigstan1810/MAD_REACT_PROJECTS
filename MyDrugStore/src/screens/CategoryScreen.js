@@ -25,7 +25,7 @@ const CategoryScreen = ({ navigation }) => {
       style={styles.backgroundImage}
     >
       <LinearGradient
-        colors={['rgba(0,0,0,0.15)', 'rgba(0,0,0,0.20)']}
+        colors={['rgba(171, 171, 171, 0.25)', 'rgba(0,0,0,0.30)']}
 
         style={styles.gradient}
       >
