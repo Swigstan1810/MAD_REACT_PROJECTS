@@ -1,4 +1,4 @@
-import { drugData, drugCategory } from '../resources /resource';
+import { drugData, drugCategory } from '../resources/resource';
 
 // Convert drugs to the format expected by the app
 export const drugs = drugData.map(drug => ({

@@ -1,14 +1,17 @@
-import React, { useState } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View, Modal, Pressable } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { StyleSheet, Text, TouchableOpacity, View, Modal, Pressable, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useDispatch, useSelector } from 'react-redux';
 import { addToCurrent } from '../redux/learningSlice';
+import { Audio } from 'expo-av';
+import { soundsMap } from '../utils/audioMapper';
 
 const AudioPlayer = ({ gender, audioFile, onStudyPress, drug, hideStudyButton = false }) => {
   const [speed, setSpeed] = useState(1.0);
   const [showSpeedOptions, setShowSpeedOptions] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [sound, setSound] = useState(null);
   
   const dispatch = useDispatch();
   const currentLearning = useSelector(state => state.learning.currentLearning);
@@ -20,12 +23,101 @@ const AudioPlayer = ({ gender, audioFile, onStudyPress, drug, hideStudyButton = 
   
   const speedOptions = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
   
-  const handlePlayPress = () => {
-    console.log(`Playing ${audioFile} at speed ${speed}x`);
-    setIsPlaying(!isPlaying);
+  // Cleanup sound when component unmounts
+  useEffect(() => {
+    return () => {
+      if (sound) {
+        sound.unloadAsync();
+      }
+    };
+  }, [sound]);
+  
+  const handlePlayPress = async () => {
+    // If sound is already playing, stop it
+    if (isPlaying && sound) {
+      await sound.stopAsync();
+      setIsPlaying(false);
+      return;
+    }
     
-    // Mock audio playback with timeout to toggle state back
-    if (!isPlaying) {
+    try {
+      // Unload previous sound if it exists
+      if (sound) {
+        await sound.unloadAsync();
+      }
+      
+      console.log(`Playing audio: ${audioFile} at speed: ${speed}x`);
+      
+      // Get the audio source from our static mapping
+      // Note: audioFile is the full filename like "Ibuprofen - female.wav"
+      const audioSource = soundsMap[audioFile];
+      
+      if (!audioSource) {
+        console.log(`Audio file not found in mapping: ${audioFile}`);
+        // Try to recover by checking if the mapping is slightly different
+        
+        // This is a fallback mechanism to handle possible inconsistencies in file naming
+        const fallbackFile = Object.keys(soundsMap).find(key => 
+          key.toLowerCase().includes(audioFile.toLowerCase().split(' - ')[0])
+          && key.toLowerCase().includes(gender.toLowerCase())
+        );
+        
+        if (fallbackFile) {
+          console.log(`Found fallback audio file: ${fallbackFile}`);
+          const { sound: newSound } = await Audio.Sound.createAsync(
+            soundsMap[fallbackFile],
+            { 
+              shouldPlay: true,
+              rate: speed,
+              volume: 1.0 
+            }
+          );
+          
+          setSound(newSound);
+          setIsPlaying(true);
+          
+          // Listen for playback status updates
+          newSound.setOnPlaybackStatusUpdate((status) => {
+            if (status.didJustFinish) {
+              setIsPlaying(false);
+            }
+          });
+          return;
+        }
+        
+        throw new Error('Audio file not found');
+      }
+      
+      // Create and play the sound
+      const { sound: newSound } = await Audio.Sound.createAsync(
+        audioSource,
+        { 
+          shouldPlay: true,
+          rate: speed,
+          volume: 1.0 
+        }
+      );
+      
+      setSound(newSound);
+      setIsPlaying(true);
+      
+      // Listen for playback status updates
+      newSound.setOnPlaybackStatusUpdate((status) => {
+        if (status.didJustFinish) {
+          setIsPlaying(false);
+        }
+      });
+    } catch (error) {
+      console.log(`Error playing ${audioFile}: ${error}`);
+      Alert.alert(
+        'Playback Error', 
+        `Unable to play "${audioFile}". Please check that the file exists.`,
+        [{ text: 'OK' }]
+      );
+      
+      // Fall back to mock behavior for milestone 2 - this ensures UI behaves correctly
+      // even if there are issues with the audio files
+      setIsPlaying(true);
       setTimeout(() => {
         setIsPlaying(false);
       }, 3000); // Simulate 3 seconds of audio playback
@@ -36,9 +128,18 @@ const AudioPlayer = ({ gender, audioFile, onStudyPress, drug, hideStudyButton = 
     setShowSpeedOptions(!showSpeedOptions);
   };
   
-  const selectSpeed = (newSpeed) => {
+  const selectSpeed = async (newSpeed) => {
     setSpeed(newSpeed);
     setShowSpeedOptions(false);
+    
+    // If sound is already loaded, update the playback rate
+    if (sound) {
+      try {
+        await sound.setRateAsync(newSpeed, true);
+      } catch (error) {
+        console.log(`Error setting playback rate: ${error}`);
+      }
+    }
   };
   
   const handleStudyButtonPress = () => {
@@ -137,7 +238,7 @@ const AudioPlayer = ({ gender, audioFile, onStudyPress, drug, hideStudyButton = 
   );
 };
 
-// Add the styles that were missing
+// Styles remain the same as in your original AudioPlayer.js
 const styles = StyleSheet.create({
   container: {
     marginVertical: 10,

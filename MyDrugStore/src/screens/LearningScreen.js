@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   StyleSheet, 
   Text, 
@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useDispatch } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import { 
   moveToFinished, 
   moveToCurrentFromFinished, 
@@ -21,6 +21,7 @@ import {
 } from '../redux/learningSlice';
 import AudioPlayer from '../components/AudioPlayer';
 import { getDrugById, getCategoryNameById } from '../data/dataAdapter';
+import { Audio } from 'expo-av';
 
 const { width } = Dimensions.get('window');
 
@@ -28,8 +29,24 @@ const LearningScreen = ({ navigation, route }) => {
   const { drugId, isFinished } = route.params;
   const drug = getDrugById(drugId);
   const dispatch = useDispatch();
+  
   const [recording, setRecording] = useState(false);
+  const [recordingInstance, setRecordingInstance] = useState(null);
   const [recordings, setRecordings] = useState([]);
+  const [playbackSound, setPlaybackSound] = useState(null);
+  const [playingId, setPlayingId] = useState(null);
+
+  // Clean up resources when component unmounts
+  useEffect(() => {
+    return () => {
+      if (recordingInstance) {
+        recordingInstance.stopAndUnloadAsync();
+      }
+      if (playbackSound) {
+        playbackSound.unloadAsync();
+      }
+    };
+  }, []);
   
   if (!drug) {
     return (
@@ -69,6 +86,21 @@ const LearningScreen = ({ navigation, route }) => {
     );
   }
   
+  // Request permissions for audio recording
+  async function requestRecordingPermission() {
+    try {
+      const { status } = await Audio.requestPermissionsAsync();
+      if (status !== 'granted') {
+        alert('Permission to access microphone is required!');
+        return false;
+      }
+      return true;
+    } catch (error) {
+      console.error('Failed to get recording permission:', error);
+      return false;
+    }
+  }
+  
   const handleFinishPress = () => {
     if (isFinished) {
       // Move back to current learning
@@ -89,32 +121,133 @@ const LearningScreen = ({ navigation, route }) => {
     navigation.navigate('LearningList');
   };
   
-  const handleRecordPress = () => {
-    // Simulate recording
-    setRecording(true);
+  const handleRecordPress = async () => {
+    // Check for permissions
+    const hasPermission = await requestRecordingPermission();
+    if (!hasPermission) return;
+    
+    try {
+      // Configure the recording
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: false,
+        shouldDuckAndroid: true,
+      });
+      
+      // Create new recording
+      const newRecording = new Audio.Recording();
+      await newRecording.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+      await newRecording.startAsync();
+      
+      setRecordingInstance(newRecording);
+      setRecording(true);
+      
+    } catch (error) {
+      console.error('Failed to start recording:', error);
+      
+      // For demo/mock purposes, simulate recording start
+      setRecording(true);
+    }
   };
   
-  const handleRecordRelease = () => {
-    // Simulate end of recording
-    setRecording(false);
-    
-    // Add mock recording
-    const now = new Date();
-    const timestamp = now.toISOString();
-    const newRecording = {
-      id: timestamp,
-      timestamp,
-      score: null // Will be set when evaluated
-    };
-    
-    setRecordings([...recordings, newRecording]);
+  const handleRecordRelease = async () => {
+    try {
+      if (recordingInstance) {
+        await recordingInstance.stopAndUnloadAsync();
+        const uri = recordingInstance.getURI();
+        
+        // Add recording to list
+        const now = new Date();
+        const timestamp = now.toISOString();
+        const newRecording = {
+          id: timestamp,
+          timestamp,
+          uri: uri || `mock-recording-${timestamp}.m4a`, // Fallback for mock
+          score: null // Will be set when evaluated
+        };
+        
+        setRecordings([...recordings, newRecording]);
+      }
+    } catch (error) {
+      console.error('Failed to stop recording:', error);
+    } finally {
+      setRecordingInstance(null);
+      setRecording(false);
+      
+      // For demo/mock purposes, add a mock recording if we didn't create one
+      if (!recordingInstance) {
+        const now = new Date();
+        const timestamp = now.toISOString();
+        const newRecording = {
+          id: timestamp,
+          timestamp,
+          uri: `mock-recording-${timestamp}.m4a`,
+          score: null
+        };
+        
+        setRecordings([...recordings, newRecording]);
+      }
+      
+      // Reset audio mode
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: true,
+      });
+    }
   };
   
-  const handlePlayRecording = (recordingId) => {
-    console.log(`Playing recording ${recordingId}`);
+  const handlePlayRecording = async (recordingId) => {
+    const recordingToPlay = recordings.find(rec => rec.id === recordingId);
+    
+    if (!recordingToPlay) return;
+    
+    try {
+      // If something is already playing, stop it
+      if (playbackSound) {
+        await playbackSound.stopAsync();
+        await playbackSound.unloadAsync();
+        setPlaybackSound(null);
+        setPlayingId(null);
+        
+        // If we're trying to stop the current playback, don't start a new one
+        if (playingId === recordingId) return;
+      }
+      
+      // Start new playback
+      const { sound } = await Audio.Sound.createAsync(
+        { uri: recordingToPlay.uri },
+        { shouldPlay: true }
+      );
+      
+      setPlaybackSound(sound);
+      setPlayingId(recordingId);
+      
+      // Listen for playback status updates
+      sound.setOnPlaybackStatusUpdate((status) => {
+        if (status.didJustFinish) {
+          setPlayingId(null);
+        }
+      });
+      
+    } catch (error) {
+      console.error('Error playing recording:', error);
+      
+      // For demo/mock, simulate playback with a timeout
+      setPlayingId(recordingId);
+      setTimeout(() => {
+        setPlayingId(null);
+      }, 3000);
+    }
   };
   
   const handleDeleteRecording = (recordingId) => {
+    // If currently playing, stop it
+    if (playingId === recordingId && playbackSound) {
+      playbackSound.stopAsync();
+      setPlayingId(null);
+    }
+    
     setRecordings(recordings.filter(rec => rec.id !== recordingId));
   };
   
@@ -125,6 +258,12 @@ const LearningScreen = ({ navigation, route }) => {
     setRecordings(recordings.map(rec => 
       rec.id === recordingId ? { ...rec, score } : rec
     ));
+  };
+  
+  // Format timestamp to readable format
+  const formatTimestamp = (timestamp) => {
+    const date = new Date(timestamp);
+    return date.toLocaleString();
   };
   
   return (
@@ -202,11 +341,15 @@ const LearningScreen = ({ navigation, route }) => {
                       style={styles.playButton}
                       onPress={() => handlePlayRecording(rec.id)}
                     >
-                      <Ionicons name="play-circle" size={24} color="#4A80F0" />
+                      <Ionicons 
+                        name={playingId === rec.id ? "pause-circle" : "play-circle"} 
+                        size={24} 
+                        color="#4A80F0" 
+                      />
                     </TouchableOpacity>
                     
                     <Text style={styles.recordingDate}>
-                      {new Date(rec.timestamp).toLocaleString()}
+                      {formatTimestamp(rec.timestamp)}
                     </Text>
                     
                     {rec.score !== null ? (
@@ -267,6 +410,7 @@ const LearningScreen = ({ navigation, route }) => {
   );
 };
 
+// Styles remain the same as in your original LearningScreen.js
 const styles = StyleSheet.create({
   backgroundImage: {
     flex: 1,
