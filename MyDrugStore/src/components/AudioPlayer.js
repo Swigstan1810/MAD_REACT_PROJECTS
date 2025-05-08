@@ -5,7 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useDispatch, useSelector } from 'react-redux';
 import { addToCurrent } from '../redux/learningSlice';
 import { Audio } from 'expo-av';
-import { soundsMap } from '../utils/audioMapper';
+import { soundsMap, getAudioForDrug } from '../utils/audioMapper';
 
 const AudioPlayer = ({ gender, audioFile, onStudyPress, drug, hideStudyButton = false }) => {
   const [speed, setSpeed] = useState(1.0);
@@ -21,7 +21,7 @@ const AudioPlayer = ({ gender, audioFile, onStudyPress, drug, hideStudyButton = 
     (currentLearning.some(item => item.id === drug.id) || 
      finished.some(item => item.id === drug.id));
   
-  const speedOptions = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
+  const speedOptions = [0.25, 0.33, 0.75, 1.0];
   
   // Cleanup sound when component unmounts
   useEffect(() => {
@@ -31,6 +31,17 @@ const AudioPlayer = ({ gender, audioFile, onStudyPress, drug, hideStudyButton = 
       }
     };
   }, [sound]);
+
+  // Extract drug name from audioFile
+  const extractDrugName = (fileName) => {
+    if (!fileName) return '';
+    
+    // Remove gender and file extension to get drug name
+    let drugName = fileName.split(' - ')[0];
+    // Remove trailing numbers (for male files that might have "1" in them)
+    drugName = drugName.replace(/\s+\d+$/, '');
+    return drugName;
+  };
   
   const handlePlayPress = async () => {
     // If sound is already playing, stop it
@@ -46,46 +57,62 @@ const AudioPlayer = ({ gender, audioFile, onStudyPress, drug, hideStudyButton = 
         await sound.unloadAsync();
       }
       
-      console.log(`Playing audio: ${audioFile} at speed: ${speed}x`);
+      // Extract drug name and find the appropriate audio file
+      const drugName = extractDrugName(audioFile);
+      console.log(`Playing drug: ${drugName}, gender: ${gender}, speed: ${speed}x`);
       
-      // Get the audio source from our static mapping
-      // Note: audioFile is the full filename like "Ibuprofen - female.wav"
-      const audioSource = soundsMap[audioFile];
+      // Look for audio file in our collection using the correct gender pattern
+      let audioSource;
       
+      // Try using the audioMapper helper first
+      if (drug && drug.name) {
+        audioSource = getAudioForDrug(drug.name, gender);
+      }
+      
+      // If that doesn't work, try with the provided audioFile
+      if (!audioSource && audioFile) {
+        if (gender === 'female') {
+          // Female pattern: "Drugname - female.wav"
+          const femaleFileName = `${drugName} - female.wav`;
+          audioSource = soundsMap[femaleFileName];
+        } else {
+          // Male pattern: "Drugname 1 - male.wav"
+          const maleFileName = `${drugName} 1 - male.wav`;
+          audioSource = soundsMap[maleFileName];
+        }
+      }
+      
+      // Still no audio file? Try a fallback approach
       if (!audioSource) {
-        console.log(`Audio file not found in mapping: ${audioFile}`);
-        // Try to recover by checking if the mapping is slightly different
-        
-        // This is a fallback mechanism to handle possible inconsistencies in file naming
-        const fallbackFile = Object.keys(soundsMap).find(key => 
-          key.toLowerCase().includes(audioFile.toLowerCase().split(' - ')[0])
-          && key.toLowerCase().includes(gender.toLowerCase())
-        );
-        
-        if (fallbackFile) {
-          console.log(`Found fallback audio file: ${fallbackFile}`);
-          const { sound: newSound } = await Audio.Sound.createAsync(
-            soundsMap[fallbackFile],
-            { 
-              shouldPlay: true,
-              rate: speed,
-              volume: 1.0 
-            }
-          );
+        // Handle edge case where male version isn't available
+        if (gender === 'male') {
+          // Check if we should fall back to female version
+          const missingMaleAudio = [
+            'Dihydrocodeine', 'Doxylamine', 'Metoclopramide', 'Prochlorperazine'
+          ];
           
-          setSound(newSound);
-          setIsPlaying(true);
-          
-          // Listen for playback status updates
-          newSound.setOnPlaybackStatusUpdate((status) => {
-            if (status.didJustFinish) {
-              setIsPlaying(false);
-            }
-          });
-          return;
+          if (missingMaleAudio.some(name => drugName.includes(name))) {
+            console.log(`Male version not available for ${drugName}, falling back to female version`);
+            const femaleFileName = `${drugName} - female.wav`;
+            audioSource = soundsMap[femaleFileName];
+          }
         }
         
-        throw new Error('Audio file not found');
+        // If we still don't have an audio source, try a more generic search
+        if (!audioSource) {
+          // Find any file that contains the drug name and gender
+          const fallbackFile = Object.keys(soundsMap).find(key => 
+            key.toLowerCase().includes(drugName.toLowerCase()) &&
+            key.toLowerCase().includes(gender.toLowerCase())
+          );
+          
+          if (fallbackFile) {
+            console.log(`Found fallback audio file: ${fallbackFile}`);
+            audioSource = soundsMap[fallbackFile];
+          } else {
+            throw new Error(`Audio file not found for ${drugName} (${gender})`);
+          }
+        }
       }
       
       // Create and play the sound
@@ -108,10 +135,10 @@ const AudioPlayer = ({ gender, audioFile, onStudyPress, drug, hideStudyButton = 
         }
       });
     } catch (error) {
-      console.log(`Error playing ${audioFile}: ${error}`);
+      console.log(`Error playing audio for ${audioFile}: ${error}`);
       Alert.alert(
         'Playback Error', 
-        `Unable to play "${audioFile}". Please check that the file exists.`,
+        `Unable to play audio for "${extractDrugName(audioFile)}". Please check that the file exists.`,
         [{ text: 'OK' }]
       );
       
@@ -133,11 +160,22 @@ const AudioPlayer = ({ gender, audioFile, onStudyPress, drug, hideStudyButton = 
     setShowSpeedOptions(false);
     
     // If sound is already loaded, update the playback rate
-    if (sound) {
+    if (sound && isPlaying) {
       try {
         await sound.setRateAsync(newSpeed, true);
       } catch (error) {
         console.log(`Error setting playback rate: ${error}`);
+        
+        // If changing speed fails, stop current playback and restart with new speed
+        await sound.stopAsync();
+        await sound.unloadAsync();
+        setSound(null);
+        setIsPlaying(false);
+        
+        // Small delay to ensure audio system resets before trying again
+        setTimeout(() => {
+          handlePlayPress();
+        }, 200);
       }
     }
   };
@@ -182,16 +220,23 @@ const AudioPlayer = ({ gender, audioFile, onStudyPress, drug, hideStudyButton = 
           </Text>
         </View>
         
-        <TouchableOpacity style={styles.speedButton} onPress={toggleSpeedOptions}>
+        <TouchableOpacity 
+          style={[styles.speedButton, { minWidth: 70, alignItems: 'center' }]} 
+          onPress={toggleSpeedOptions}
+        >
           <Text style={styles.speedText}>{speed}x</Text>
           <Ionicons name="chevron-down" size={16} color="#fff" />
         </TouchableOpacity>
         
         {!hideStudyButton && !isDrugInLearning && (
-          <TouchableOpacity style={styles.studyButton} onPress={handleStudyButtonPress}>
-            <Text style={styles.studyButtonText}>
-              <Ionicons name="bookmark" size={14} color="#fff" style={styles.studyIcon} /> Study
-            </Text>
+          <TouchableOpacity 
+            style={[styles.studyButton, { minWidth: 100, alignItems: 'center', justifyContent: 'center' }]} 
+            onPress={handleStudyButtonPress}
+          >
+            <View style={styles.studyButtonContent}>
+              <Ionicons name="bookmark" size={18} color="#fff" />
+              <Text style={styles.studyButtonText}>Study</Text>
+            </View>
           </TouchableOpacity>
         )}
       </LinearGradient>
@@ -238,7 +283,6 @@ const AudioPlayer = ({ gender, audioFile, onStudyPress, drug, hideStudyButton = 
   );
 };
 
-// Styles remain the same as in your original AudioPlayer.js
 const styles = StyleSheet.create({
   container: {
     marginVertical: 10,
@@ -254,15 +298,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     padding: 10,
+    paddingVertical: 15, // Increased vertical padding
+    height: 70, // Fixed height for consistent appearance
   },
   iconButton: {
     padding: 5,
+    width: 54, // Fixed width
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   genderContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginLeft: 10,
+    marginLeft: 5,
     paddingHorizontal: 8,
+    minWidth: 100, // Ensure consistent width
   },
   genderLabel: {
     fontSize: 16,
@@ -273,20 +323,21 @@ const styles = StyleSheet.create({
   speedButton: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
     borderRadius: 8,
     paddingHorizontal: 12,
-    paddingVertical: 6,
-    marginLeft: 10,
+    paddingVertical: 8,
+    marginLeft: 'auto', // Push to right side
+    marginRight: 10,
   },
   speedText: {
-    fontSize: 14,
+    fontSize: 16,
     marginRight: 4,
     color: '#fff',
     fontWeight: '500',
   },
   studyButton: {
-    marginLeft: 'auto',
     backgroundColor: 'rgba(0, 0, 0, 0.2)',
     paddingHorizontal: 14,
     paddingVertical: 8,
@@ -294,15 +345,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.3)',
   },
-  studyButtonText: {
-    color: '#fff',
-    fontWeight: '500',
-    fontSize: 14,
+  studyButtonContent: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  studyIcon: {
-    marginRight: 4,
+  studyButtonText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 16,
+    marginLeft: 5,
   },
   modalOverlay: {
     flex: 1,
@@ -317,7 +369,7 @@ const styles = StyleSheet.create({
     padding: 16,
     alignItems: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
     elevation: 5,

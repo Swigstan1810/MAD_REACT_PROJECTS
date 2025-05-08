@@ -8,7 +8,8 @@ import {
   SafeAreaView,
   ImageBackground,
   Dimensions,
-  Pressable
+  Pressable,
+  Alert
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -35,18 +36,38 @@ const LearningScreen = ({ navigation, route }) => {
   const [recordings, setRecordings] = useState([]);
   const [playbackSound, setPlaybackSound] = useState(null);
   const [playingId, setPlayingId] = useState(null);
+  const [isAudioMode, setIsAudioMode] = useState(false);
 
   // Clean up resources when component unmounts
   useEffect(() => {
     return () => {
-      if (recordingInstance) {
-        recordingInstance.stopAndUnloadAsync();
-      }
-      if (playbackSound) {
-        playbackSound.unloadAsync();
-      }
+      cleanupResources();
     };
   }, []);
+  
+  // Cleanup function to properly release audio resources
+  const cleanupResources = async () => {
+    try {
+      if (recordingInstance) {
+        await recordingInstance.stopAndUnloadAsync();
+      }
+      
+      if (playbackSound) {
+        await playbackSound.stopAsync();
+        await playbackSound.unloadAsync();
+      }
+      
+      // Reset audio mode
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: false,
+        shouldDuckAndroid: true,
+      });
+    } catch (error) {
+      console.log('Cleanup error:', error);
+    }
+  };
   
   if (!drug) {
     return (
@@ -87,19 +108,27 @@ const LearningScreen = ({ navigation, route }) => {
   }
   
   // Request permissions for audio recording
-  async function requestRecordingPermission() {
+  const requestRecordingPermission = async () => {
     try {
-      const { status } = await Audio.requestPermissionsAsync();
+      console.log('Requesting recording permission...');
+      const { status, canAskAgain } = await Audio.requestPermissionsAsync();
+      
       if (status !== 'granted') {
-        alert('Permission to access microphone is required!');
+        Alert.alert(
+          'Permission Required',
+          'Permission to access microphone is required for recording.',
+          [{ text: 'OK' }]
+        );
         return false;
       }
+      
+      console.log('Recording permission granted');
       return true;
     } catch (error) {
       console.error('Failed to get recording permission:', error);
       return false;
     }
-  }
+  };
   
   const handleFinishPress = () => {
     if (isFinished) {
@@ -121,13 +150,11 @@ const LearningScreen = ({ navigation, route }) => {
     navigation.navigate('LearningList');
   };
   
-  const handleRecordPress = async () => {
-    // Check for permissions
-    const hasPermission = await requestRecordingPermission();
-    if (!hasPermission) return;
+  const prepareAudioMode = async () => {
+    if (isAudioMode) return true;
     
     try {
-      // Configure the recording
+      console.log('Setting audio mode...');
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: true,
         playsInSilentModeIOS: true,
@@ -135,65 +162,130 @@ const LearningScreen = ({ navigation, route }) => {
         shouldDuckAndroid: true,
       });
       
-      // Create new recording
+      setIsAudioMode(true);
+      return true;
+    } catch (error) {
+      console.error('Failed to set audio mode:', error);
+      return false;
+    }
+  };
+  
+  const handleRecordPress = async () => {
+    // If already recording, don't start a new recording
+    if (recording) return;
+    
+    try {
+      // Check for permissions first
+      const hasPermission = await requestRecordingPermission();
+      if (!hasPermission) return;
+      
+      // Ensure audio mode is set properly
+      const audioModeSet = await prepareAudioMode();
+      if (!audioModeSet) {
+        Alert.alert('Error', 'Failed to prepare audio for recording');
+        return;
+      }
+      
+      // Make sure previous recording is cleaned up
+      if (recordingInstance) {
+        await recordingInstance.stopAndUnloadAsync();
+        setRecordingInstance(null);
+      }
+      
+      console.log('Creating new recording...');
       const newRecording = new Audio.Recording();
       await newRecording.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
       await newRecording.startAsync();
       
       setRecordingInstance(newRecording);
       setRecording(true);
+      console.log('Recording started successfully');
       
     } catch (error) {
       console.error('Failed to start recording:', error);
       
-      // For demo/mock purposes, simulate recording start
+      if (error.message.includes('Only one Recording')) {
+        // Try to recover by resetting audio mode
+        try {
+          await Audio.setAudioModeAsync({
+            allowsRecordingIOS: false,
+            playsInSilentModeIOS: true,
+          });
+          
+          setTimeout(async () => {
+            await Audio.setAudioModeAsync({
+              allowsRecordingIOS: true,
+              playsInSilentModeIOS: true,
+              staysActiveInBackground: false,
+              shouldDuckAndroid: true,
+            });
+          }, 300);
+        } catch (resetError) {
+          console.error('Failed to reset audio mode:', resetError);
+        }
+      }
+      
+      // For demo purposes, simulate recording start
+      Alert.alert('Recording Error', 'Could not start recording, but will simulate for demo purposes.');
       setRecording(true);
     }
   };
   
   const handleRecordRelease = async () => {
+    if (!recording) return;
+    
     try {
+      let recordingUri = null;
+      
       if (recordingInstance) {
+        console.log('Stopping recording...');
         await recordingInstance.stopAndUnloadAsync();
-        const uri = recordingInstance.getURI();
-        
-        // Add recording to list
-        const now = new Date();
-        const timestamp = now.toISOString();
-        const newRecording = {
-          id: timestamp,
-          timestamp,
-          uri: uri || `mock-recording-${timestamp}.m4a`, // Fallback for mock
-          score: null // Will be set when evaluated
-        };
-        
-        setRecordings([...recordings, newRecording]);
+        recordingUri = recordingInstance.getURI();
+        console.log(`Recording saved to: ${recordingUri}`);
       }
+      
+      // Add recording to list
+      const now = new Date();
+      const timestamp = now.toISOString();
+      const newRecording = {
+        id: timestamp,
+        timestamp,
+        uri: recordingUri || `mock-recording-${timestamp}.m4a`, // Fallback for mock
+        score: null // Will be set when evaluated
+      };
+      
+      setRecordings(prevRecordings => [...prevRecordings, newRecording]);
+      
     } catch (error) {
       console.error('Failed to stop recording:', error);
+      Alert.alert('Error', 'Failed to save recording, but will create mock recording for demo');
+      
+      // Add a mock recording for demo purposes
+      const now = new Date();
+      const timestamp = now.toISOString();
+      const newRecording = {
+        id: timestamp,
+        timestamp,
+        uri: `mock-recording-${timestamp}.m4a`,
+        score: null
+      };
+      
+      setRecordings(prevRecordings => [...prevRecordings, newRecording]);
     } finally {
+      // Reset state
       setRecordingInstance(null);
       setRecording(false);
       
-      // For demo/mock purposes, add a mock recording if we didn't create one
-      if (!recordingInstance) {
-        const now = new Date();
-        const timestamp = now.toISOString();
-        const newRecording = {
-          id: timestamp,
-          timestamp,
-          uri: `mock-recording-${timestamp}.m4a`,
-          score: null
-        };
-        
-        setRecordings([...recordings, newRecording]);
-      }
-      
       // Reset audio mode
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
-        playsInSilentModeIOS: true,
-      });
+      try {
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: false,
+          playsInSilentModeIOS: true,
+        });
+        setIsAudioMode(false);
+      } catch (error) {
+        console.error('Failed to reset audio mode:', error);
+      }
     }
   };
   
@@ -202,19 +294,56 @@ const LearningScreen = ({ navigation, route }) => {
     
     if (!recordingToPlay) return;
     
-    try {
-      // If something is already playing, stop it
-      if (playbackSound) {
+    // If we're already playing this recording, stop it
+    if (playingId === recordingId && playbackSound) {
+      try {
         await playbackSound.stopAsync();
         await playbackSound.unloadAsync();
         setPlaybackSound(null);
         setPlayingId(null);
+      } catch (error) {
+        console.error('Error stopping playback:', error);
+      }
+      return;
+    }
+    
+    // Stop any current playback
+    if (playbackSound) {
+      try {
+        await playbackSound.stopAsync();
+        await playbackSound.unloadAsync();
+        setPlaybackSound(null);
+        setPlayingId(null);
+      } catch (error) {
+        console.error('Error stopping previous playback:', error);
+      }
+    }
+    
+    try {
+      // Make sure we're not in recording mode
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: false,
+        shouldDuckAndroid: true,
+      });
+      
+      console.log(`Playing recording from: ${recordingToPlay.uri}`);
+      
+      // Check if this is a mock recording
+      if (recordingToPlay.uri.startsWith('mock-recording')) {
+        console.log('Mock recording detected, simulating playback');
+        setPlayingId(recordingId);
         
-        // If we're trying to stop the current playback, don't start a new one
-        if (playingId === recordingId) return;
+        // Simulate playback with a timeout
+        setTimeout(() => {
+          setPlayingId(null);
+        }, 3000);
+        
+        return;
       }
       
-      // Start new playback
+      // Create and play the sound
       const { sound } = await Audio.Sound.createAsync(
         { uri: recordingToPlay.uri },
         { shouldPlay: true }
@@ -232,8 +361,9 @@ const LearningScreen = ({ navigation, route }) => {
       
     } catch (error) {
       console.error('Error playing recording:', error);
+      Alert.alert('Playback Error', 'Could not play the recording, but will simulate for demo purposes.');
       
-      // For demo/mock, simulate playback with a timeout
+      // Simulate playback with a timeout
       setPlayingId(recordingId);
       setTimeout(() => {
         setPlayingId(null);
@@ -244,8 +374,14 @@ const LearningScreen = ({ navigation, route }) => {
   const handleDeleteRecording = (recordingId) => {
     // If currently playing, stop it
     if (playingId === recordingId && playbackSound) {
-      playbackSound.stopAsync();
-      setPlayingId(null);
+      try {
+        playbackSound.stopAsync();
+        playbackSound.unloadAsync();
+        setPlaybackSound(null);
+        setPlayingId(null);
+      } catch (error) {
+        console.error('Error stopping playback during delete:', error);
+      }
     }
     
     setRecordings(recordings.filter(rec => rec.id !== recordingId));

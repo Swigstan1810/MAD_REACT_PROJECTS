@@ -12,6 +12,13 @@ const getCategoryGradient = (categoryName) => {
     'Antihypertensives': ['#4facfe', '#00f2fe'],
     'Antidepressants': ['#f093fb', '#f5576c'],
     'Anti-inflammatory': ['#f83600', '#f9d423'],
+    'Pain Relief': ['#1c92d2', '#f2fcfe'],
+    'Antihistamines': ['#833ab4', '#fd1d1d'],
+    'Sleep Aids': ['#4568dc', '#b06ab3'],
+    'Cardiovascular Drugs': ['#4776E6', '#8E54E9'],
+    'Diabetes Medications': ['#f953c6', '#b91d73'],
+    'Gastrointestinal Drugs': ['#11998e', '#38ef7d'],
+    'Respiratory Medications': ['#7b4397', '#dc2430'],
     // Default gradient for any other category
     'default': ['#4776E6', '#8E54E9']
   };
@@ -28,6 +35,13 @@ const getCategoryIcon = (categoryName) => {
     'Antihypertensives': 'heart',
     'Antidepressants': 'happy',
     'Anti-inflammatory': 'flame',
+    'Pain Relief': 'bandage',
+    'Antihistamines': 'water',
+    'Sleep Aids': 'moon',
+    'Cardiovascular Drugs': 'heart-circle',
+    'Diabetes Medications': 'pulse',
+    'Gastrointestinal Drugs': 'medical',
+    'Respiratory Medications': 'fitness',
     // Default icon for any other category
     'default': 'medical'
   };
@@ -102,6 +116,8 @@ const styles = StyleSheet.create({
     textShadowColor: 'rgba(0, 0, 0, 0.25)',
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 2,
+    flex: 1, // Allow text to flex for better wrapping
+    marginRight: 10, // Add space between text and count badge
   },
   countBadge: {
     backgroundColor: 'rgba(255, 253, 253, 0.3)',
@@ -110,6 +126,9 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.5)',
+    minWidth: 44, // Ensure consistent badge size
+    alignItems: 'center', // Center the text
+    justifyContent: 'center',
   },
   drugCount: {
     color: '#fff',
