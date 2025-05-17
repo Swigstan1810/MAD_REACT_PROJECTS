@@ -7,43 +7,51 @@ import {
   TouchableOpacity, 
   SafeAreaView,
   ImageBackground,
-  Dimensions,
   Pressable,
-  Alert
+  Alert,
+  ActivityIndicator
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useDispatch, useSelector } from 'react-redux';
-import { 
-  moveToFinished, 
-  moveToCurrentFromFinished, 
-  removeFromCurrent, 
-  removeFromFinished 
-} from '../redux/learningSlice';
+import { moveToFinished, moveToCurrentFromFinished, removeFromCurrent, removeFromFinished } from '../redux/learningSlice';
+import { updateDrugStatus, removeDrugFromLearning, addPronunciationScore } from '../redux/studyRecordsSlice';
 import AudioPlayer from '../components/AudioPlayer';
 import { getDrugById, getCategoryNameById } from '../data/dataAdapter';
-import { Audio } from 'expo-av';
-
-const { width } = Dimensions.get('window');
+import * as AudioUtils from '../utils/audioUtils';
+import { v4 as uuidv4 } from 'uuid';
 
 const LearningScreen = ({ navigation, route }) => {
   const { drugId, isFinished } = route.params;
   const drug = getDrugById(drugId);
   const dispatch = useDispatch();
   
+  const { user, isAuthenticated } = useSelector(state => state.auth);
+  const { records } = useSelector(state => state.studyRecords);
+  
+  // Find the study record for this drug
+  const studyRecord = records.find(record => record.drugId === drugId);
+  
   const [recording, setRecording] = useState(false);
   const [recordingInstance, setRecordingInstance] = useState(null);
   const [recordings, setRecordings] = useState([]);
-  const [playbackSound, setPlaybackSound] = useState(null);
   const [playingId, setPlayingId] = useState(null);
-  const [isAudioMode, setIsAudioMode] = useState(false);
-
-  // Clean up resources when component unmounts
+  const [currentSound, setCurrentSound] = useState(null);
+  const [isEvaluating, setIsEvaluating] = useState(false);
+  
+  // Cleanup resources when component unmounts
   useEffect(() => {
     return () => {
       cleanupResources();
     };
   }, []);
+  
+  // Load existing recordings if available
+  useEffect(() => {
+    if (studyRecord && studyRecord.recordings) {
+      setRecordings(studyRecord.recordings);
+    }
+  }, [studyRecord]);
   
   // Cleanup function to properly release audio resources
   const cleanupResources = async () => {
@@ -52,18 +60,9 @@ const LearningScreen = ({ navigation, route }) => {
         await recordingInstance.stopAndUnloadAsync();
       }
       
-      if (playbackSound) {
-        await playbackSound.stopAsync();
-        await playbackSound.unloadAsync();
+      if (currentSound) {
+        await AudioUtils.stopAudio(currentSound);
       }
-      
-      // Reset audio mode
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
-        playsInSilentModeIOS: true,
-        staysActiveInBackground: false,
-        shouldDuckAndroid: true,
-      });
     } catch (error) {
       console.log('Cleanup error:', error);
     }
@@ -107,126 +106,32 @@ const LearningScreen = ({ navigation, route }) => {
     );
   }
   
-  // Request permissions for audio recording
-  const requestRecordingPermission = async () => {
-    try {
-      console.log('Requesting recording permission...');
-      const { status, canAskAgain } = await Audio.requestPermissionsAsync();
-      
-      if (status !== 'granted') {
-        Alert.alert(
-          'Permission Required',
-          'Permission to access microphone is required for recording.',
-          [{ text: 'OK' }]
-        );
-        return false;
-      }
-      
-      console.log('Recording permission granted');
-      return true;
-    } catch (error) {
-      console.error('Failed to get recording permission:', error);
-      return false;
-    }
-  };
-  
-  const handleFinishPress = () => {
-    if (isFinished) {
-      // Move back to current learning
-      dispatch(moveToCurrentFromFinished(drug));
-    } else {
-      // Move to finished
-      dispatch(moveToFinished(drug));
-    }
-    navigation.navigate('LearningList');
-  };
-  
-  const handleRemovePress = () => {
-    if (isFinished) {
-      dispatch(removeFromFinished(drug));
-    } else {
-      dispatch(removeFromCurrent(drug));
-    }
-    navigation.navigate('LearningList');
-  };
-  
-  const prepareAudioMode = async () => {
-    if (isAudioMode) return true;
-    
-    try {
-      console.log('Setting audio mode...');
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-        staysActiveInBackground: false,
-        shouldDuckAndroid: true,
-      });
-      
-      setIsAudioMode(true);
-      return true;
-    } catch (error) {
-      console.error('Failed to set audio mode:', error);
-      return false;
-    }
-  };
-  
   const handleRecordPress = async () => {
     // If already recording, don't start a new recording
     if (recording) return;
     
     try {
       // Check for permissions first
-      const hasPermission = await requestRecordingPermission();
-      if (!hasPermission) return;
-      
-      // Ensure audio mode is set properly
-      const audioModeSet = await prepareAudioMode();
-      if (!audioModeSet) {
-        Alert.alert('Error', 'Failed to prepare audio for recording');
+      const hasPermission = await AudioUtils.requestRecordingPermission();
+      if (!hasPermission) {
+        Alert.alert('Permission Required', 'We need microphone permission to record audio');
         return;
       }
       
-      // Make sure previous recording is cleaned up
-      if (recordingInstance) {
-        await recordingInstance.stopAndUnloadAsync();
-        setRecordingInstance(null);
+      // Start recording
+      const newRecordingInstance = await AudioUtils.startRecording();
+      
+      if (newRecordingInstance) {
+        setRecordingInstance(newRecordingInstance);
+        setRecording(true);
+      } else {
+        // For demo purposes, simulate recording start if actual recording fails
+        Alert.alert('Recording', 'Simulating recording for demo purposes');
+        setRecording(true);
       }
-      
-      console.log('Creating new recording...');
-      const newRecording = new Audio.Recording();
-      await newRecording.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
-      await newRecording.startAsync();
-      
-      setRecordingInstance(newRecording);
-      setRecording(true);
-      console.log('Recording started successfully');
-      
     } catch (error) {
-      console.error('Failed to start recording:', error);
-      
-      if (error.message.includes('Only one Recording')) {
-        // Try to recover by resetting audio mode
-        try {
-          await Audio.setAudioModeAsync({
-            allowsRecordingIOS: false,
-            playsInSilentModeIOS: true,
-          });
-          
-          setTimeout(async () => {
-            await Audio.setAudioModeAsync({
-              allowsRecordingIOS: true,
-              playsInSilentModeIOS: true,
-              staysActiveInBackground: false,
-              shouldDuckAndroid: true,
-            });
-          }, 300);
-        } catch (resetError) {
-          console.error('Failed to reset audio mode:', resetError);
-        }
-      }
-      
-      // For demo purposes, simulate recording start
-      Alert.alert('Recording Error', 'Could not start recording, but will simulate for demo purposes.');
+      console.error('Recording error:', error);
+      Alert.alert('Recording Error', 'Could not start recording, but simulating for demo');
       setRecording(true);
     }
   };
@@ -238,10 +143,12 @@ const LearningScreen = ({ navigation, route }) => {
       let recordingUri = null;
       
       if (recordingInstance) {
-        console.log('Stopping recording...');
-        await recordingInstance.stopAndUnloadAsync();
-        recordingUri = recordingInstance.getURI();
-        console.log(`Recording saved to: ${recordingUri}`);
+        const uri = await AudioUtils.stopRecording(recordingInstance);
+        if (uri) {
+          // Generate a unique filename for this recording
+          const filename = `recording-${uuidv4()}.m4a`;
+          recordingUri = await AudioUtils.saveRecording(uri, filename);
+        }
       }
       
       // Add recording to list
@@ -258,8 +165,6 @@ const LearningScreen = ({ navigation, route }) => {
       
     } catch (error) {
       console.error('Failed to stop recording:', error);
-      Alert.alert('Error', 'Failed to save recording, but will create mock recording for demo');
-      
       // Add a mock recording for demo purposes
       const now = new Date();
       const timestamp = now.toISOString();
@@ -275,17 +180,6 @@ const LearningScreen = ({ navigation, route }) => {
       // Reset state
       setRecordingInstance(null);
       setRecording(false);
-      
-      // Reset audio mode
-      try {
-        await Audio.setAudioModeAsync({
-          allowsRecordingIOS: false,
-          playsInSilentModeIOS: true,
-        });
-        setIsAudioMode(false);
-      } catch (error) {
-        console.error('Failed to reset audio mode:', error);
-      }
     }
   };
   
@@ -295,11 +189,10 @@ const LearningScreen = ({ navigation, route }) => {
     if (!recordingToPlay) return;
     
     // If we're already playing this recording, stop it
-    if (playingId === recordingId && playbackSound) {
+    if (playingId === recordingId && currentSound) {
       try {
-        await playbackSound.stopAsync();
-        await playbackSound.unloadAsync();
-        setPlaybackSound(null);
+        await AudioUtils.stopAudio(currentSound);
+        setCurrentSound(null);
         setPlayingId(null);
       } catch (error) {
         console.error('Error stopping playback:', error);
@@ -308,11 +201,10 @@ const LearningScreen = ({ navigation, route }) => {
     }
     
     // Stop any current playback
-    if (playbackSound) {
+    if (currentSound) {
       try {
-        await playbackSound.stopAsync();
-        await playbackSound.unloadAsync();
-        setPlaybackSound(null);
+        await AudioUtils.stopAudio(currentSound);
+        setCurrentSound(null);
         setPlayingId(null);
       } catch (error) {
         console.error('Error stopping previous playback:', error);
@@ -320,16 +212,6 @@ const LearningScreen = ({ navigation, route }) => {
     }
     
     try {
-      // Make sure we're not in recording mode
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
-        playsInSilentModeIOS: true,
-        staysActiveInBackground: false,
-        shouldDuckAndroid: true,
-      });
-      
-      console.log(`Playing recording from: ${recordingToPlay.uri}`);
-      
       // Check if this is a mock recording
       if (recordingToPlay.uri.startsWith('mock-recording')) {
         console.log('Mock recording detected, simulating playback');
@@ -343,26 +225,22 @@ const LearningScreen = ({ navigation, route }) => {
         return;
       }
       
-      // Create and play the sound
-      const { sound } = await Audio.Sound.createAsync(
-        { uri: recordingToPlay.uri },
-        { shouldPlay: true }
-      );
+      // Play the recording
+      const sound = await AudioUtils.playAudio(recordingToPlay.uri);
       
-      setPlaybackSound(sound);
-      setPlayingId(recordingId);
-      
-      // Listen for playback status updates
-      sound.setOnPlaybackStatusUpdate((status) => {
-        if (status.didJustFinish) {
-          setPlayingId(null);
-        }
-      });
-      
+      if (sound) {
+        setCurrentSound(sound);
+        setPlayingId(recordingId);
+        
+        // Listen for playback to finish
+        sound.setOnPlaybackStatusUpdate((status) => {
+          if (status.didJustFinish) {
+            setPlayingId(null);
+          }
+        });
+      }
     } catch (error) {
       console.error('Error playing recording:', error);
-      Alert.alert('Playback Error', 'Could not play the recording, but will simulate for demo purposes.');
-      
       // Simulate playback with a timeout
       setPlayingId(recordingId);
       setTimeout(() => {
@@ -371,29 +249,118 @@ const LearningScreen = ({ navigation, route }) => {
     }
   };
   
-  const handleDeleteRecording = (recordingId) => {
+  const handleDeleteRecording = async (recordingId) => {
     // If currently playing, stop it
-    if (playingId === recordingId && playbackSound) {
+    if (playingId === recordingId && currentSound) {
       try {
-        playbackSound.stopAsync();
-        playbackSound.unloadAsync();
-        setPlaybackSound(null);
+        await AudioUtils.stopAudio(currentSound);
+        setCurrentSound(null);
         setPlayingId(null);
       } catch (error) {
         console.error('Error stopping playback during delete:', error);
       }
     }
     
+    // Find the recording to delete
+    const recordingToDelete = recordings.find(rec => rec.id === recordingId);
+    
+    // If it's a real recording, delete the file
+    if (recordingToDelete && !recordingToDelete.uri.startsWith('mock-recording')) {
+      try {
+        await AudioUtils.deleteRecording(recordingToDelete.uri);
+      } catch (error) {
+        console.error('Error deleting recording file:', error);
+      }
+    }
+    
+    // Update recordings list
     setRecordings(recordings.filter(rec => rec.id !== recordingId));
   };
   
-  const handleEvaluate = (recordingId) => {
-    // Simulate evaluation - generate random score
-    const score = Math.floor(Math.random() * 101);
+  const handleEvaluate = async (recordingId) => {
+    setIsEvaluating(true);
     
-    setRecordings(recordings.map(rec => 
-      rec.id === recordingId ? { ...rec, score } : rec
-    ));
+    try {
+      // Find the recording to evaluate
+      const recordingToEvaluate = recordings.find(rec => rec.id === recordingId);
+      
+      if (!recordingToEvaluate) {
+        Alert.alert('Error', 'Recording not found');
+        return;
+      }
+      
+      // Get the reference audio based on gender
+      const referenceAudio = user && user.gender === 'female' ? drug.femaleAudio : drug.maleAudio;
+      
+      // Simulate evaluation - in a real app, this would compare the audio
+      const score = AudioUtils.evaluateAndScorePronunciation(recordingToEvaluate.uri, referenceAudio);
+      
+      // Update recording with score
+      const updatedRecordings = recordings.map(rec => 
+        rec.id === recordingId ? { ...rec, score } : rec
+      );
+      
+      setRecordings(updatedRecordings);
+      
+      // If authenticated, update score on the server
+      if (isAuthenticated && studyRecord) {
+        dispatch(addPronunciationScore({ 
+          recordId: studyRecord.id, 
+          score 
+        }));
+      }
+      
+      // Show success message
+      Alert.alert('Evaluation Complete', `Your pronunciation scored ${score} out of 100`);
+    } catch (error) {
+      console.error('Evaluation error:', error);
+      Alert.alert('Evaluation Error', 'There was a problem evaluating your recording');
+    } finally {
+      setIsEvaluating(false);
+    }
+  };
+  
+  const handleFinishPress = () => {
+    if (isFinished) {
+      // Move back to current learning in local state
+      dispatch(moveToCurrentFromFinished(drug));
+      
+      // If authenticated, update on server
+      if (isAuthenticated && studyRecord) {
+        dispatch(updateDrugStatus({ 
+          recordId: studyRecord.id, 
+          status: 'learning' 
+        }));
+      }
+    } else {
+      // Move to finished in local state
+      dispatch(moveToFinished(drug));
+      
+      // If authenticated, update on server
+      if (isAuthenticated && studyRecord) {
+        dispatch(updateDrugStatus({ 
+          recordId: studyRecord.id, 
+          status: 'finished' 
+        }));
+      }
+    }
+    
+    navigation.navigate('LearningList');
+  };
+  
+  const handleRemovePress = () => {
+    if (isFinished) {
+      dispatch(removeFromFinished(drug));
+    } else {
+      dispatch(removeFromCurrent(drug));
+    }
+    
+    // If authenticated, remove on server
+    if (isAuthenticated && studyRecord) {
+      dispatch(removeDrugFromLearning(studyRecord.id));
+    }
+    
+    navigation.navigate('LearningList');
   };
   
   // Format timestamp to readable format
@@ -423,6 +390,7 @@ const LearningScreen = ({ navigation, route }) => {
           </View>
 
           <ScrollView contentContainerStyle={styles.content}>
+            {/* Drug info card */}
             <View style={styles.card}>
               <View style={styles.section}>
                 <Text style={styles.sectionTitle}>Molecular Formula</Text>
@@ -448,6 +416,7 @@ const LearningScreen = ({ navigation, route }) => {
               </View>
             </View>
 
+            {/* Audio players */}
             <View style={styles.card}>
               <Text style={styles.sectionTitle}>Pronunciations</Text>
 
@@ -470,7 +439,6 @@ const LearningScreen = ({ navigation, route }) => {
             {recordings.length > 0 && (
               <View style={styles.card}>
                 <Text style={styles.sectionTitle}>Your Recordings</Text>
-                
                 {recordings.map(rec => (
                   <View key={rec.id} style={styles.recordingItem}>
                     <TouchableOpacity 
@@ -489,13 +457,20 @@ const LearningScreen = ({ navigation, route }) => {
                     </Text>
                     
                     {rec.score !== null ? (
-                      <Text style={styles.scoreText}>({rec.score})</Text>
+                      <View style={styles.scoreContainer}>
+                        <Text style={styles.scoreText}>{rec.score}</Text>
+                      </View>
                     ) : (
                       <TouchableOpacity 
                         style={styles.evaluateButton}
                         onPress={() => handleEvaluate(rec.id)}
+                        disabled={isEvaluating}
                       >
-                        <Ionicons name="checkmark-circle" size={24} color="#50C878" />
+                        {isEvaluating ? (
+                          <ActivityIndicator size="small" color="#50C878" />
+                        ) : (
+                          <Ionicons name="checkmark-circle" size={24} color="#50C878" />
+                        )}
                       </TouchableOpacity>
                     )}
                     
@@ -546,7 +521,6 @@ const LearningScreen = ({ navigation, route }) => {
   );
 };
 
-// Styles remain the same as in your original LearningScreen.js
 const styles = StyleSheet.create({
   backgroundImage: {
     flex: 1,
@@ -691,14 +665,24 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#333',
   },
-  scoreText: {
-    fontSize: 16,
-    color: '#4A80F0',
-    fontWeight: 'bold',
+  scoreContainer: {
+    backgroundColor: '#4A80F0',
+    borderRadius: 15,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     marginRight: 10,
+  },
+  scoreText: {
+    fontSize: 14,
+    color: '#fff',
+    fontWeight: 'bold',
   },
   evaluateButton: {
     marginRight: 10,
+    width: 24,
+    height: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   deleteButton: {
     padding: 5,

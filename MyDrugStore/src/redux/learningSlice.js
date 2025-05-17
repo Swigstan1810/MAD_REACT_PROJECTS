@@ -56,4 +56,8 @@ export const {
   removeFromFinished 
 } = learningSlice.actions;
 
-export default learningSlice.reducer;
+export default learningSlice.reducer;console.log('addToCurrent action dispatched');
+console.log('moveToFinished action dispatched');
+console.log('moveToCurrentFromFinished action dispatched');
+console.log('removeFromCurrent action dispatched');
+console.log('removeFromFinished action dispatched');
