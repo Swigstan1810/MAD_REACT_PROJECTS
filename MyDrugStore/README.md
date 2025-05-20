@@ -2,6 +2,13 @@
 
 Drug Speak is a React Native mobile application designed to assist pharmacy students in learning the correct pronunciation of drug names. The app provides a comprehensive collection of drugs organized by categories, with each drug entry including its name, description, molecular formula, and audio pronunciations by both female and male speakers. Students can listen to pronunciations at varying speeds, record their own attempts, and receive a simulated evaluation score (randomly generated between 0 and 100 for this assignment). The app integrates with a dedicated Drug Speak Server for user authentication and learning record storage, enabling students to view a ranking of all users based on their pronunciation practice.
 
+## Demo Video
+
+[![Drug Speak App Demo](https://img.youtube.com/vi/ZLRiZs4oXqo/0.jpg)](https://youtu.be/ZLRiZs4oXqo?si=JfVOd979Yv2VSW63)
+
+Click the image above to watch the Drug Speak demonstration video on YouTube.
+
+
 ## Features
 
 - **Drug Catalog**: Browse drugs organized by categories, with details including name, description, molecular formula, and audio pronunciations.
