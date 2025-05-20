@@ -9,4 +9,13 @@ export const store = configureStore({
     auth: authReducer,
     studyRecords: studyRecordsReducer,
   },
+  // Add middleware configuration if needed
+  middleware: (getDefaultMiddleware) => 
+    getDefaultMiddleware({
+      serializableCheck: {
+        // Ignore these action types to avoid serialization errors with complex data types
+        ignoredActions: ['studyRecords/updateDrugStatus/fulfilled'],
+      },
+    }),
+  devTools: process.env.NODE_ENV !== 'production',
 });

@@ -9,7 +9,8 @@ import {
   ImageBackground,
   Pressable,
   Alert,
-  ActivityIndicator
+  ActivityIndicator,
+  Platform
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -19,7 +20,6 @@ import { updateDrugStatus, removeDrugFromLearning, addPronunciationScore } from 
 import AudioPlayer from '../components/AudioPlayer';
 import { getDrugById, getCategoryNameById } from '../data/dataAdapter';
 import * as AudioUtils from '../utils/audioUtils';
-import { v4 as uuidv4 } from 'uuid';
 
 const LearningScreen = ({ navigation, route }) => {
   const { drugId, isFinished } = route.params;
@@ -38,6 +38,7 @@ const LearningScreen = ({ navigation, route }) => {
   const [playingId, setPlayingId] = useState(null);
   const [currentSound, setCurrentSound] = useState(null);
   const [isEvaluating, setIsEvaluating] = useState(false);
+  const [recordingError, setRecordingError] = useState(null);
   
   // Cleanup resources when component unmounts
   useEffect(() => {
@@ -57,12 +58,27 @@ const LearningScreen = ({ navigation, route }) => {
   const cleanupResources = async () => {
     try {
       if (recordingInstance) {
-        await recordingInstance.stopAndUnloadAsync();
+        console.log('Cleaning up recording instance');
+        try {
+          const status = await recordingInstance.getStatusAsync();
+          if (status.isRecording) {
+            await recordingInstance.stopAndUnloadAsync();
+          } else {
+            await recordingInstance.unloadAsync();
+          }
+        } catch (err) {
+          console.log('Error cleaning up recording:', err);
+        }
+        setRecordingInstance(null);
       }
       
       if (currentSound) {
+        console.log('Cleaning up sound object');
         await AudioUtils.stopAudio(currentSound);
+        setCurrentSound(null);
       }
+      
+      setPlayingId(null);
     } catch (error) {
       console.log('Cleanup error:', error);
     }
@@ -111,6 +127,9 @@ const LearningScreen = ({ navigation, route }) => {
     if (recording) return;
     
     try {
+      // Reset any previous recording errors
+      setRecordingError(null);
+      
       // Check for permissions first
       const hasPermission = await AudioUtils.requestRecordingPermission();
       if (!hasPermission) {
@@ -118,20 +137,24 @@ const LearningScreen = ({ navigation, route }) => {
         return;
       }
       
-      // Start recording
+      console.log('Starting to record...');
+      
+      // Start recording - use the improved function that has iOS-specific fixes
       const newRecordingInstance = await AudioUtils.startRecording();
       
       if (newRecordingInstance) {
         setRecordingInstance(newRecordingInstance);
         setRecording(true);
+        console.log('Recording started successfully');
       } else {
+        console.log('Recording couldn\'t start, using mock behavior');
         // For demo purposes, simulate recording start if actual recording fails
-        Alert.alert('Recording', 'Simulating recording for demo purposes');
         setRecording(true);
       }
     } catch (error) {
       console.error('Recording error:', error);
-      Alert.alert('Recording Error', 'Could not start recording, but simulating for demo');
+      setRecordingError(error.message || "Unknown recording error");
+      // Always fall back to mock behavior for the demo
       setRecording(true);
     }
   };
@@ -139,41 +162,66 @@ const LearningScreen = ({ navigation, route }) => {
   const handleRecordRelease = async () => {
     if (!recording) return;
     
+    console.log('Stopping recording...');
+    
     try {
       let recordingUri = null;
       
       if (recordingInstance) {
-        const uri = await AudioUtils.stopRecording(recordingInstance);
-        if (uri) {
-          // Generate a unique filename for this recording
-          const filename = `recording-${uuidv4()}.m4a`;
-          recordingUri = await AudioUtils.saveRecording(uri, filename);
+        console.log('Attempting to stop real recording');
+        try {
+          const uri = await AudioUtils.stopRecording(recordingInstance);
+          if (uri) {
+            // Generate a unique filename for this recording
+            const timestamp = new Date().getTime();
+            const filename = `recording-${timestamp}.m4a`;
+            recordingUri = await AudioUtils.saveRecording(uri, filename);
+            console.log('Recording saved to:', recordingUri);
+          } else {
+            console.log('No URI returned from stopRecording');
+          }
+        } catch (stopError) {
+          console.error('Error stopping recording:', stopError);
+          setRecordingError(stopError.message || "Error stopping recording");
         }
+      } else {
+        console.log('No recording instance, using mock behavior');
       }
       
-      // Add recording to list
+      // Add recording to list - use mock if real recording failed
       const now = new Date();
       const timestamp = now.toISOString();
+      // Use our custom ID function instead of UUID
+      const id = AudioUtils.generateUniqueId();
+      
       const newRecording = {
-        id: timestamp,
+        id: id,
         timestamp,
         uri: recordingUri || `mock-recording-${timestamp}.m4a`, // Fallback for mock
         score: null // Will be set when evaluated
       };
       
+      console.log('Adding new recording to list:', newRecording.id);
+      
       setRecordings(prevRecordings => [...prevRecordings, newRecording]);
       
     } catch (error) {
-      console.error('Failed to stop recording:', error);
-      // Add a mock recording for demo purposes
+      console.error('Failed in recording process:', error);
+      setRecordingError(error.message || "Error in recording process");
+      
+      // Always add a mock recording for demo purposes
       const now = new Date();
       const timestamp = now.toISOString();
+      const id = AudioUtils.generateUniqueId();
+      
       const newRecording = {
-        id: timestamp,
+        id: id,
         timestamp,
         uri: `mock-recording-${timestamp}.m4a`,
         score: null
       };
+      
+      console.log('Adding mock recording after error:', newRecording.id);
       
       setRecordings(prevRecordings => [...prevRecordings, newRecording]);
     } finally {
@@ -186,10 +234,14 @@ const LearningScreen = ({ navigation, route }) => {
   const handlePlayRecording = async (recordingId) => {
     const recordingToPlay = recordings.find(rec => rec.id === recordingId);
     
-    if (!recordingToPlay) return;
+    if (!recordingToPlay) {
+      console.log('Recording not found:', recordingId);
+      return;
+    }
     
     // If we're already playing this recording, stop it
     if (playingId === recordingId && currentSound) {
+      console.log('Stopping current playback of:', recordingId);
       try {
         await AudioUtils.stopAudio(currentSound);
         setCurrentSound(null);
@@ -202,6 +254,7 @@ const LearningScreen = ({ navigation, route }) => {
     
     // Stop any current playback
     if (currentSound) {
+      console.log('Stopping previous playback before starting new one');
       try {
         await AudioUtils.stopAudio(currentSound);
         setCurrentSound(null);
@@ -214,16 +267,19 @@ const LearningScreen = ({ navigation, route }) => {
     try {
       // Check if this is a mock recording
       if (recordingToPlay.uri.startsWith('mock-recording')) {
-        console.log('Mock recording detected, simulating playback');
+        console.log('Mock recording detected, simulating playback for:', recordingId);
         setPlayingId(recordingId);
         
         // Simulate playback with a timeout
         setTimeout(() => {
+          console.log('Mock playback finished');
           setPlayingId(null);
         }, 3000);
         
         return;
       }
+      
+      console.log('Playing real recording:', recordingToPlay.uri);
       
       // Play the recording
       const sound = await AudioUtils.playAudio(recordingToPlay.uri);
@@ -235,12 +291,22 @@ const LearningScreen = ({ navigation, route }) => {
         // Listen for playback to finish
         sound.setOnPlaybackStatusUpdate((status) => {
           if (status.didJustFinish) {
+            console.log('Playback finished naturally');
             setPlayingId(null);
+            setCurrentSound(null);
           }
         });
+      } else {
+        console.log('Failed to create sound object, using mock behavior');
+        // Simulate playback with a timeout
+        setPlayingId(recordingId);
+        setTimeout(() => {
+          setPlayingId(null);
+        }, 3000);
       }
     } catch (error) {
       console.error('Error playing recording:', error);
+      
       // Simulate playback with a timeout
       setPlayingId(recordingId);
       setTimeout(() => {
@@ -252,6 +318,7 @@ const LearningScreen = ({ navigation, route }) => {
   const handleDeleteRecording = async (recordingId) => {
     // If currently playing, stop it
     if (playingId === recordingId && currentSound) {
+      console.log('Stopping playback before deleting:', recordingId);
       try {
         await AudioUtils.stopAudio(currentSound);
         setCurrentSound(null);
@@ -267,13 +334,17 @@ const LearningScreen = ({ navigation, route }) => {
     // If it's a real recording, delete the file
     if (recordingToDelete && !recordingToDelete.uri.startsWith('mock-recording')) {
       try {
+        console.log('Deleting real recording file:', recordingToDelete.uri);
         await AudioUtils.deleteRecording(recordingToDelete.uri);
       } catch (error) {
         console.error('Error deleting recording file:', error);
       }
+    } else {
+      console.log('No need to delete file for mock recording');
     }
     
     // Update recordings list
+    console.log('Removing recording from state:', recordingId);
     setRecordings(recordings.filter(rec => rec.id !== recordingId));
   };
   
@@ -289,11 +360,14 @@ const LearningScreen = ({ navigation, route }) => {
         return;
       }
       
+      console.log('Evaluating recording:', recordingId);
+      
       // Get the reference audio based on gender
       const referenceAudio = user && user.gender === 'female' ? drug.femaleAudio : drug.maleAudio;
       
-      // Simulate evaluation - in a real app, this would compare the audio
+      // Use the updated evaluation function that produces scores between 0-100
       const score = AudioUtils.evaluateAndScorePronunciation(recordingToEvaluate.uri, referenceAudio);
+      console.log('Evaluation score:', score);
       
       // Update recording with score
       const updatedRecordings = recordings.map(rec => 
@@ -304,6 +378,7 @@ const LearningScreen = ({ navigation, route }) => {
       
       // If authenticated, update score on the server
       if (isAuthenticated && studyRecord) {
+        console.log('Sending score to server for record:', studyRecord.id);
         dispatch(addPronunciationScore({ 
           recordId: studyRecord.id, 
           score 
@@ -323,40 +398,58 @@ const LearningScreen = ({ navigation, route }) => {
   const handleFinishPress = () => {
     if (isFinished) {
       // Move back to current learning in local state
+      console.log('Moving drug from finished to current learning:', drug.id);
       dispatch(moveToCurrentFromFinished(drug));
       
-      // If authenticated, update on server
+      // If authenticated, update on server with correct status values
       if (isAuthenticated && studyRecord) {
+        console.log("Moving to learning state:", studyRecord.id);
         dispatch(updateDrugStatus({ 
           recordId: studyRecord.id, 
-          status: 'learning' 
+          updateData: {
+            currentLearning: 1,  // Set to 1 to indicate it's in learning
+            finishedLearning: 0, // Set to 0 to indicate it's not finished
+            totalScore: studyRecord.highestScore || 0
+          }
         }));
       }
     } else {
       // Move to finished in local state
+      console.log('Moving drug from current learning to finished:', drug.id);
       dispatch(moveToFinished(drug));
       
-      // If authenticated, update on server
+      // If authenticated, update on server with correct status values
       if (isAuthenticated && studyRecord) {
+        console.log("Moving to finished state:", studyRecord.id);
         dispatch(updateDrugStatus({ 
           recordId: studyRecord.id, 
-          status: 'finished' 
+          updateData: {
+            currentLearning: 0,  // Set to 0 to indicate it's not in learning
+            finishedLearning: 1, // Set to 1 to indicate it's finished
+            totalScore: studyRecord.highestScore || 0
+          }
         }));
       }
     }
     
-    navigation.navigate('LearningList');
+    // Add a small delay before navigating away to allow the state update to complete
+    setTimeout(() => {
+      navigation.navigate('LearningList');
+    }, 300);
   };
   
   const handleRemovePress = () => {
     if (isFinished) {
+      console.log('Removing from finished:', drug.id);
       dispatch(removeFromFinished(drug));
     } else {
+      console.log('Removing from current learning:', drug.id);
       dispatch(removeFromCurrent(drug));
     }
     
     // If authenticated, remove on server
     if (isAuthenticated && studyRecord) {
+      console.log('Removing from server:', studyRecord.id);
       dispatch(removeDrugFromLearning(studyRecord.id));
     }
     
@@ -482,6 +575,15 @@ const LearningScreen = ({ navigation, route }) => {
                     </TouchableOpacity>
                   </View>
                 ))}
+              </View>
+            )}
+            
+            {/* Error message if recording failed */}
+            {recordingError && (
+              <View style={styles.errorMessageContainer}>
+                <Text style={styles.errorMessageText}>
+                  Using simulated recording due to device limitations.
+                </Text>
               </View>
             )}
             
@@ -699,6 +801,17 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 20,
     marginBottom: 30,
+  },
+  errorMessageContainer: {
+    backgroundColor: 'rgba(255, 99, 71, 0.8)',
+    padding: 10,
+    borderRadius: 8,
+    marginBottom: 20,
+  },
+  errorMessageText: {
+    color: '#fff',
+    fontSize: 14,
+    textAlign: 'center',
   },
   returnButton: {
     backgroundColor: 'rgba(0, 0, 0, 0.3)',
