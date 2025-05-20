@@ -1,10 +1,8 @@
-// Updated studyRecordsSlice.js with local storage persistence
-
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import { studyRecordsService } from '../services/api';
 import localStorageService from '../services/localStorageService';
 
-// New async thunks for loading and saving state
+// async thunks for loading and saving state
 export const loadPersistedRecords = createAsyncThunk(
   'studyRecords/loadPersistedRecords',
   async (userId, { rejectWithValue }) => {

@@ -4,7 +4,7 @@ import { Platform } from 'react-native';
 
 // IMPORTANT: Configure the correct API URL based on your environment
 // Using the IP from your Expo logs
-const API_URL = 'http://10.128.191.110:3000';
+const API_URL = 'http://192.168.0.104:3000';
 
 console.log('API connecting to:', API_URL);
 
