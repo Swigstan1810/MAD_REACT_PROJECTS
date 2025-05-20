@@ -18,32 +18,75 @@ import { useDispatch, useSelector } from 'react-redux';
 import { signUp, clearError } from '../redux/authSlice';
 
 const SignUpScreen = ({ navigation }) => {
-  const [name, setName] = useState('');
+  const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [gender, setGender] = useState('male'); // Default to male
+  const [isSubmitting, setIsSubmitting] = useState(false);
   
   const dispatch = useDispatch();
   const { loading, error } = useSelector((state) => state.auth);
   
+  // Clear errors when component mounts
+  useEffect(() => {
+    dispatch(clearError());
+  }, []);
+  
+  // Handle errors from Redux state
   useEffect(() => {
     if (error) {
-      Alert.alert('Registration Error', error);
+      console.log('Error from Redux state:', error);
+      
+      if (typeof error === 'string') {
+        if (error.includes('UNIQUE constraint failed') || 
+            error.includes('already exists') || 
+            error.includes('Duplicate')) {
+          Alert.alert(
+            'Email Already Registered', 
+            'This email address is already registered. Please use a different email address or sign in with your existing account.'
+          );
+        } else {
+          Alert.alert('Registration Error', error);
+        }
+      } else {
+        // If error is an object or something else
+        Alert.alert('Registration Error', 'Failed to create account. Please try again.');
+      }
+      
       dispatch(clearError());
+      setIsSubmitting(false);
     }
   }, [error, dispatch]);
   
   const handleClear = () => {
-    setName('');
+    setUsername('');
     setEmail('');
     setPassword('');
     setGender('male');
   };
   
-  const handleSignUp = () => {
+  const handleSignUp = async () => {
+    // Prevent multiple submissions
+    if (isSubmitting) return;
+    
     // Validate inputs
-    if (!name.trim() || !email.trim() || !password.trim()) {
-      Alert.alert('Missing Information', 'Please fill in all fields');
+    if (!username.trim()) {
+      Alert.alert('Missing Information', 'Please enter a username');
+      return;
+    }
+    
+    if (!email.trim()) {
+      Alert.alert('Missing Information', 'Please enter your email address');
+      return;
+    }
+    
+    if (!password.trim()) {
+      Alert.alert('Missing Information', 'Please enter a password');
+      return;
+    }
+    
+    if (password.length < 6) {
+      Alert.alert('Weak Password', 'Password should be at least 6 characters long');
       return;
     }
     
@@ -54,8 +97,50 @@ const SignUpScreen = ({ navigation }) => {
       return;
     }
     
-    // Dispatch sign up action
-    dispatch(signUp({ name, email, password, gender }));
+    try {
+      setIsSubmitting(true);
+      
+      // Updated to use username consistently
+      const userData = {
+        username: username.trim(),
+        email: email.trim().toLowerCase(),
+        password: password.trim(),
+        gender
+      };
+      
+      console.log('Attempting to sign up with data:', JSON.stringify({
+        ...userData,
+        password: '******' // Don't log the actual password
+      }));
+      
+      // Dispatch sign up action
+      const resultAction = await dispatch(signUp(userData));
+      
+      // Check if the action was fulfilled or rejected
+      if (signUp.fulfilled.match(resultAction)) {
+        console.log('Signup successful:', resultAction.payload);
+        Alert.alert(
+          'Account Created',
+          'Your account has been created successfully!',
+          [{ text: 'OK', onPress: () => navigation.navigate('SignIn') }]
+        );
+      } else if (signUp.rejected.match(resultAction)) {
+        console.log('Signup failed with payload:', resultAction.payload);
+        console.log('Signup failed with error:', resultAction.error);
+        
+        // Handle specific error cases
+        const errorMessage = resultAction.payload || resultAction.error.message;
+        Alert.alert('Registration Failed', `Could not create account: ${errorMessage}`);
+      }
+    } catch (err) {
+      console.log('Unexpected error during signup:', err);
+      Alert.alert(
+        'Registration Error',
+        'An unexpected error occurred. Please try again later.'
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
   
   return (
@@ -77,10 +162,12 @@ const SignUpScreen = ({ navigation }) => {
               
               <TextInput
                 style={styles.input}
-                placeholder="Full Name"
+                placeholder="Username"
                 placeholderTextColor="#999"
-                value={name}
-                onChangeText={setName}
+                value={username}
+                onChangeText={setUsername}
+                returnKeyType="next"
+                autoCapitalize="words"
               />
               
               <View style={styles.genderContainer}>
@@ -130,6 +217,7 @@ const SignUpScreen = ({ navigation }) => {
                 autoCapitalize="none"
                 value={email}
                 onChangeText={setEmail}
+                returnKeyType="next"
               />
               
               <TextInput
@@ -139,23 +227,30 @@ const SignUpScreen = ({ navigation }) => {
                 secureTextEntry
                 value={password}
                 onChangeText={setPassword}
+                returnKeyType="done"
+                onSubmitEditing={handleSignUp}
               />
               
               <View style={styles.buttonContainer}>
                 <TouchableOpacity
                   style={[styles.button, styles.clearButton]}
                   onPress={handleClear}
+                  disabled={isSubmitting}
                 >
                   <Ionicons name="trash-outline" size={20} color="#fff" />
                   <Text style={styles.buttonText}>Clear</Text>
                 </TouchableOpacity>
                 
                 <TouchableOpacity
-                  style={[styles.button, styles.signUpButton]}
+                  style={[
+                    styles.button, 
+                    styles.signUpButton,
+                    (loading || isSubmitting || !username.trim() || !email.trim() || !password.trim()) && styles.disabledButton
+                  ]}
                   onPress={handleSignUp}
-                  disabled={loading}
+                  disabled={loading || isSubmitting || !username.trim() || !email.trim() || !password.trim()}
                 >
-                  {loading ? (
+                  {(loading || isSubmitting) ? (
                     <ActivityIndicator color="#fff" size="small" />
                   ) : (
                     <>
@@ -169,6 +264,7 @@ const SignUpScreen = ({ navigation }) => {
               <TouchableOpacity
                 onPress={() => navigation.navigate('SignIn')}
                 style={styles.switchContainer}
+                disabled={isSubmitting}
               >
                 <Text style={styles.switchText}>
                   Switch to: Sign in with an existing user
@@ -183,6 +279,7 @@ const SignUpScreen = ({ navigation }) => {
   );
 };
 
+// Styles remain unchanged
 const styles = StyleSheet.create({
   backgroundImage: {
     flex: 1,
@@ -274,6 +371,10 @@ const styles = StyleSheet.create({
   },
   signUpButton: {
     backgroundColor: '#4A80F0',
+  },
+  disabledButton: {
+    backgroundColor: '#4A80F0',
+    opacity: 0.6,
   },
   buttonText: {
     color: '#fff',
