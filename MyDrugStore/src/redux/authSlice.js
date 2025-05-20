@@ -1,5 +1,3 @@
-// Updated authSlice.js with improved persistence and state handling
-
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import { authService } from '../services/api';
 import localStorageService from '../services/localStorageService';

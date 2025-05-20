@@ -9,7 +9,6 @@ export const store = configureStore({
     auth: authReducer,
     studyRecords: studyRecordsReducer,
   },
-  // Add middleware configuration if needed
   middleware: (getDefaultMiddleware) => 
     getDefaultMiddleware({
       serializableCheck: {

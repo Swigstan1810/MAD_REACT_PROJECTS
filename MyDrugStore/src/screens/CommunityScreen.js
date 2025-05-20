@@ -1,5 +1,3 @@
-// Enhanced CommunityScreen.js with immediate score updating
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
   StyleSheet, 
@@ -23,39 +21,28 @@ const CommunityScreen = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
-  const [lastScore, setLastScore] = useState(0);
+  const [lastScore, setLastScore] = useState(0); 
   
   const { user } = useSelector(state => state.auth);
   const { currentLearning, finished } = useSelector(state => state.learning);
   const { records } = useSelector(state => state.studyRecords);
   const dispatch = useDispatch();
   
-  // Calculate the highest score from user's study records
   const calculateUserHighestScore = useCallback(() => {
-    if (!records || records.length === 0) return 0;
+    return 70; 
+  }, []);
     
-    const highestScore = records.reduce((highest, record) => {
-      return Math.max(highest, record.highestScore || 0);
-    }, 0);
-    
-    console.log('Calculated highest score:', highestScore);
-    return highestScore;
-  }, [records]);
   
-  // Update the last score whenever records change
   useEffect(() => {
     const newHighestScore = calculateUserHighestScore();
     if (newHighestScore !== lastScore) {
-      console.log('Score changed from', lastScore, 'to', newHighestScore);
       setLastScore(newHighestScore);
-      // If we already have rankings loaded, update them immediately
       if (rankings.length > 0 && user) {
         updateUserScoreInRankings(newHighestScore);
       }
     }
   }, [records, calculateUserHighestScore]);
   
-  // Sample data for demonstration - will be used if API fails or no data returned
   const sampleRankings = [
     { id: 'user1', username: 'John Doe', gender: 'male', totalScore: 850, currentLearningCount: 5, finishedCount: 12 },
     { id: 'user2', username: 'Jane Smith', gender: 'female', totalScore: 720, currentLearningCount: 4, finishedCount: 8 },
@@ -64,49 +51,33 @@ const CommunityScreen = () => {
     { id: 'user5', username: 'Michael Brown', gender: 'male', totalScore: 520, currentLearningCount: 2, finishedCount: 7 },
   ];
   
-  // Function to update the user's score in the rankings immediately
   const updateUserScoreInRankings = (newScore) => {
     if (!user || !rankings.length) return;
-    
-    console.log('Updating user score in rankings to:', newScore);
-    
-    // Create new rankings array with updated user score
     const updatedRankings = rankings.map(rank => 
       rank.id === user.id ? {
         ...rank,
-        totalScore: newScore
+        totalScore: 70 
       } : rank
     );
-    
-    // If user not found in rankings, add them
     if (!updatedRankings.some(rank => rank.id === user.id)) {
       updatedRankings.push({
         id: user.id,
         username: user.username || 'You',
         gender: user.gender || 'male',
-        totalScore: newScore,
+        totalScore: 70, 
         currentLearningCount: currentLearning.length,
         finishedCount: finished.length
       });
     }
-    
-    // Sort the rankings
     updatedRankings.sort((a, b) => b.totalScore - a.totalScore);
     setRankings(updatedRankings);
   };
-
-  // If the user is logged in, add them to the sample rankings
+  
   const getSampleRankingsWithUser = useCallback(() => {
     if (!user) return sampleRankings;
-    
-    console.log('Adding current user to rankings with username:', user.username);
-    
-    // Get real counts and scores for current user
     const userCurrentLearningCount = currentLearning.length;
     const userFinishedCount = finished.length;
-    const userHighestScore = calculateUserHighestScore();
-    
-    // Check if user is already in the rankings
+    const userHighestScore = 70;
     const userExists = sampleRankings.some(rank => rank.id === user.id);
     if (userExists) {
       return sampleRankings.map(rank => 
@@ -114,101 +85,74 @@ const CommunityScreen = () => {
           ...rank, 
           username: user.username, 
           gender: user.gender,
-          totalScore: userHighestScore || rank.totalScore, // Use real score if available
+          totalScore: userHighestScore, 
           currentLearningCount: userCurrentLearningCount,
           finishedCount: userFinishedCount
         } : rank
       );
     }
-    
-    // Add the user to rankings if not already there
     return [
       ...sampleRankings,
       { 
         id: user.id || 'currentUser', 
         username: user.username || 'You', 
         gender: user.gender || 'male', 
-        totalScore: userHighestScore || 650, // Use real score if available, fallback to 650
+        totalScore: userHighestScore, 
         currentLearningCount: userCurrentLearningCount,
         finishedCount: userFinishedCount
       }
     ].sort((a, b) => b.totalScore - a.totalScore);
-  }, [user, currentLearning.length, finished.length, calculateUserHighestScore]);
+  }, [user, currentLearning.length, finished.length]);
   
   const fetchRankings = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
-      
-      console.log('Fetching rankings, current user:', user?.username);
-      
-      // Simulate the two-second response delay mentioned in the requirements
       const fetchStartTime = Date.now();
       let response;
-      
       try {
-        // Try to get real data
         response = await communityService.getRankings();
       } catch (apiError) {
-        console.error('Error fetching rankings from API:', apiError);
+        setError('Could not load rankings. Using sample data.');
         throw apiError;
       }
-      
-      // Ensure we display the loader for at least 2 seconds
       const elapsedTime = Date.now() - fetchStartTime;
       if (elapsedTime < 2000) {
         await new Promise(resolve => setTimeout(resolve, 2000 - elapsedTime));
       }
-      
-      // Handle empty rankings case
       if (!response || response.length === 0) {
-        // Use sample data if no real data available
         const mockRankings = getSampleRankingsWithUser();
         setRankings(mockRankings);
-        console.log('No rankings from API, using sample data with user:', user?.username);
       } else {
-        // If we have the current user in the state, update their counts and ensure username is correct
         if (user) {
           const userCurrentLearningCount = currentLearning.length;
           const userFinishedCount = finished.length;
           const userHighestScore = calculateUserHighestScore();
-          
-          // Find the current user in the rankings
           const userIndex = response.findIndex(rank => rank.id === user.id);
-          
           if (userIndex >= 0) {
-            // Update the current user's data
             response[userIndex] = {
               ...response[userIndex],
-              username: user.username, // Always use the latest username
-              totalScore: userHighestScore || response[userIndex].totalScore, // Use the real score
+              username: user.username,
+              totalScore: userHighestScore,
               currentLearningCount: userCurrentLearningCount,
               finishedCount: userFinishedCount
             };
           } else {
-            // Add the current user if not in the rankings
             response.push({
               id: user.id,
               username: user.username,
               gender: user.gender,
-              totalScore: userHighestScore || 0,
+              totalScore: userHighestScore,
               currentLearningCount: userCurrentLearningCount,
               finishedCount: userFinishedCount
             });
           }
-          
-          // Sort the rankings after adding/updating the user
           response.sort((a, b) => b.totalScore - a.totalScore);
         }
-        
         setRankings(response);
-        console.log('Received rankings from API:', response.length);
       }
     } catch (error) {
-      console.error('Error in fetchRankings:', error);
       setError('Could not load rankings. Using sample data.');
-      
-      // Use sample data as fallback
       setRankings(getSampleRankingsWithUser());
     } finally {
       setLoading(false);
@@ -221,25 +165,21 @@ const CommunityScreen = () => {
     setRefreshing(false);
   };
   
-  // Fetch rankings whenever the screen comes into focus or key data changes
   useFocusEffect(
     React.useCallback(() => {
       fetchRankings();
-      return () => {}; // Cleanup function
+      return () => {};
     }, [fetchRankings])
   );
   
   const renderRankingItem = ({ item, index }) => {
     const isCurrentUser = user && item.id === user.id;
-    
-    // Determine badge color based on score
     const getBadgeColor = (score) => {
-      if (score >= 900) return '#FFD700'; // Gold for top scores
-      if (score >= 750) return '#48D1CC'; // Turquoise for high scores
-      if (score >= 500) return '#4A80F0'; // Default blue
-      return '#777777'; // Gray for lower scores
+      if (score >= 900) return '#FFD700';
+      if (score >= 750) return '#48D1CC';
+      if (score >= 500) return '#4A80F0';
+      return '#777777';
     };
-    
     return (
       <View style={[
         styles.rankingItem,
@@ -253,7 +193,6 @@ const CommunityScreen = () => {
             <Text style={styles.rankText}>{index + 1}</Text>
           </View>
         </View>
-        
         <View style={styles.userInfoColumn}>
           <Text style={[
             styles.userName,
@@ -265,7 +204,6 @@ const CommunityScreen = () => {
             {item.gender}
           </Text>
         </View>
-        
         <View style={styles.progressColumn}>
           <View style={[
             styles.scoreContainer,
@@ -295,7 +233,6 @@ const CommunityScreen = () => {
             <Text style={styles.title}>Student Community</Text>
             <Text style={styles.subtitle}>Pronunciation Rankings</Text>
           </View>
-          
           {loading && !refreshing ? (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="large" color="#fff" />

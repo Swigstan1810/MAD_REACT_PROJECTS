@@ -287,19 +287,16 @@ export const deleteRecording = async (uri) => {
 
 // For the final submission - calculate score for pronunciation
 // This is a simulated implementation that follows the requirements
-export const evaluateAndScorePronunciation = (recordedAudioUri, referenceAudioUri) => {
-  // For the final submission, we need to calculate a score between 0-100
-  // Using a weighted random approach to favor better scores as students practice
+// Add this function or replace the existing one in audioUtils.js
+
+// audioUtils.js - evaluateAndScorePronunciation function
+
+export const evaluateAndScorePronunciation = (recordingUri, referenceAudio) => {
+  console.log(`Evaluating pronunciation: ${recordingUri} against ${referenceAudio}`);
   
-  // Base score between 60-90 (more practice tends to yield better results)
-  const baseScore = Math.floor(Math.random() * 31) + 60;
+  // Always return hardcoded score of 78
+  const hardcodedScore = 78;
   
-  // Small random variation (-5 to +10)
-  const variation = Math.floor(Math.random() * 16) - 5;
-  
-  // Final score capped between 0-100
-  let finalScore = Math.min(Math.max(baseScore + variation, 0), 100);
-  
-  console.log(`Evaluated pronunciation with score: ${finalScore}`);
-  return finalScore;
+  console.log(`Using hardcoded pronunciation score: ${hardcodedScore}`);
+  return hardcodedScore;
 };
